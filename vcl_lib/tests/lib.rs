@@ -190,6 +190,229 @@ fn test_vcl_client_creation() {
     assert!(!client.endpoint().is_empty());
 }
 
+// ===== Input validation tests =====
+//
+// Every VclClient method below validates its arguments before making any
+// network call, so these can run against a dummy endpoint without a live
+// VCL server: an invalid argument must produce InvalidParameter, not a
+// network error, proving validation runs first.
+
+fn invalid_param_client() -> VclClient {
+    VclClient::new("http://127.0.0.1:0/unused", "test_token")
+}
+
+#[tokio::test]
+async fn test_test_rejects_empty_message() {
+    let result = invalid_param_client().test("").await;
+    assert!(matches!(result, Err(VclError::InvalidParameter(_))));
+}
+
+#[tokio::test]
+async fn test_add_request_rejects_non_positive_image_id() {
+    let result = invalid_param_client()
+        .add_request(0, "now", 60, None, false)
+        .await;
+    assert!(matches!(result, Err(VclError::InvalidParameter(_))));
+}
+
+#[tokio::test]
+async fn test_add_request_rejects_empty_start() {
+    let result = invalid_param_client()
+        .add_request(1, "", 60, None, false)
+        .await;
+    assert!(matches!(result, Err(VclError::InvalidParameter(_))));
+}
+
+#[tokio::test]
+async fn test_add_request_rejects_non_positive_length() {
+    let result = invalid_param_client()
+        .add_request(1, "now", 0, None, false)
+        .await;
+    assert!(matches!(result, Err(VclError::InvalidParameter(_))));
+}
+
+#[tokio::test]
+async fn test_add_request_with_ending_rejects_non_positive_end() {
+    let result = invalid_param_client()
+        .add_request_with_ending(1, "now", 0, None, false)
+        .await;
+    assert!(matches!(result, Err(VclError::InvalidParameter(_))));
+}
+
+#[tokio::test]
+async fn test_deploy_server_rejects_non_positive_image_id() {
+    let result = invalid_param_client()
+        .deploy_server(0, "now", 3600, DeployServerOptions::default())
+        .await;
+    assert!(matches!(result, Err(VclError::InvalidParameter(_))));
+}
+
+#[tokio::test]
+async fn test_get_request_status_rejects_non_positive_id() {
+    let result = invalid_param_client().get_request_status(0).await;
+    assert!(matches!(result, Err(VclError::InvalidParameter(_))));
+}
+
+#[tokio::test]
+async fn test_get_request_connect_data_rejects_empty_ip() {
+    let result = invalid_param_client().get_request_connect_data(1, "").await;
+    assert!(matches!(result, Err(VclError::InvalidParameter(_))));
+}
+
+#[tokio::test]
+async fn test_extend_request_rejects_non_positive_extend_time() {
+    let result = invalid_param_client().extend_request(1, 0).await;
+    assert!(matches!(result, Err(VclError::InvalidParameter(_))));
+}
+
+#[tokio::test]
+async fn test_set_request_ending_rejects_non_positive_end() {
+    let result = invalid_param_client().set_request_ending(1, 0).await;
+    assert!(matches!(result, Err(VclError::InvalidParameter(_))));
+}
+
+#[tokio::test]
+async fn test_end_request_rejects_non_positive_id() {
+    let result = invalid_param_client().end_request(0).await;
+    assert!(matches!(result, Err(VclError::InvalidParameter(_))));
+}
+
+#[tokio::test]
+async fn test_auto_capture_rejects_non_positive_id() {
+    let result = invalid_param_client().auto_capture(0).await;
+    assert!(matches!(result, Err(VclError::InvalidParameter(_))));
+}
+
+#[tokio::test]
+async fn test_get_group_images_rejects_empty_name() {
+    let result = invalid_param_client().get_group_images("").await;
+    assert!(matches!(result, Err(VclError::InvalidParameter(_))));
+}
+
+#[tokio::test]
+async fn test_add_image_to_group_rejects_non_positive_image_id() {
+    let result = invalid_param_client().add_image_to_group("group", 0).await;
+    assert!(matches!(result, Err(VclError::InvalidParameter(_))));
+}
+
+#[tokio::test]
+async fn test_remove_image_from_group_rejects_empty_name() {
+    let result = invalid_param_client().remove_image_from_group("", 1).await;
+    assert!(matches!(result, Err(VclError::InvalidParameter(_))));
+}
+
+#[tokio::test]
+async fn test_add_image_group_to_computer_group_rejects_empty_computer_group() {
+    let result = invalid_param_client()
+        .add_image_group_to_computer_group("images", "")
+        .await;
+    assert!(matches!(result, Err(VclError::InvalidParameter(_))));
+}
+
+#[tokio::test]
+async fn test_remove_image_group_from_computer_group_rejects_empty_image_group() {
+    let result = invalid_param_client()
+        .remove_image_group_from_computer_group("", "computers")
+        .await;
+    assert!(matches!(result, Err(VclError::InvalidParameter(_))));
+}
+
+#[tokio::test]
+async fn test_node_exists_rejects_empty_node_name() {
+    let result = invalid_param_client().node_exists("", "parent").await;
+    assert!(matches!(result, Err(VclError::InvalidParameter(_))));
+}
+
+#[tokio::test]
+async fn test_add_node_rejects_empty_parent_node() {
+    let result = invalid_param_client().add_node("child", "").await;
+    assert!(matches!(result, Err(VclError::InvalidParameter(_))));
+}
+
+#[tokio::test]
+async fn test_remove_node_rejects_non_positive_id() {
+    let result = invalid_param_client().remove_node(0).await;
+    assert!(matches!(result, Err(VclError::InvalidParameter(_))));
+}
+
+#[tokio::test]
+async fn test_get_user_group_privs_rejects_non_positive_node_id() {
+    let result = invalid_param_client()
+        .get_user_group_privs("group", "Local", 0)
+        .await;
+    assert!(matches!(result, Err(VclError::InvalidParameter(_))));
+}
+
+#[tokio::test]
+async fn test_add_user_group_priv_rejects_empty_permissions() {
+    let result = invalid_param_client()
+        .add_user_group_priv("group", "Local", 1, "")
+        .await;
+    assert!(matches!(result, Err(VclError::InvalidParameter(_))));
+}
+
+#[tokio::test]
+async fn test_remove_user_group_priv_rejects_empty_affiliation() {
+    let result = invalid_param_client()
+        .remove_user_group_priv("group", "", 1, "manageGroup")
+        .await;
+    assert!(matches!(result, Err(VclError::InvalidParameter(_))));
+}
+
+#[tokio::test]
+async fn test_get_resource_group_privs_rejects_empty_resource_type() {
+    let result = invalid_param_client()
+        .get_resource_group_privs("group", "", 1)
+        .await;
+    assert!(matches!(result, Err(VclError::InvalidParameter(_))));
+}
+
+#[tokio::test]
+async fn test_add_resource_group_priv_rejects_non_positive_node_id() {
+    let result = invalid_param_client()
+        .add_resource_group_priv("group", "image", 0, "manageGroup")
+        .await;
+    assert!(matches!(result, Err(VclError::InvalidParameter(_))));
+}
+
+#[tokio::test]
+async fn test_remove_resource_group_priv_rejects_empty_name() {
+    let result = invalid_param_client()
+        .remove_resource_group_priv("", "image", 1, "manageGroup")
+        .await;
+    assert!(matches!(result, Err(VclError::InvalidParameter(_))));
+}
+
+#[tokio::test]
+async fn test_get_user_group_attributes_rejects_empty_name() {
+    let result = invalid_param_client()
+        .get_user_group_attributes("", "Local")
+        .await;
+    assert!(matches!(result, Err(VclError::InvalidParameter(_))));
+}
+
+#[tokio::test]
+async fn test_add_user_group_rejects_empty_owner() {
+    let max_times = UserGroupMaxTimes {
+        initial_max_time: 60,
+        total_max_time: 480,
+        max_extend_time: 60,
+        custom: true,
+    };
+    let result = invalid_param_client()
+        .add_user_group("group", "Local", "", "managers", max_times)
+        .await;
+    assert!(matches!(result, Err(VclError::InvalidParameter(_))));
+}
+
+#[tokio::test]
+async fn test_edit_user_group_rejects_empty_new_name() {
+    let result = invalid_param_client()
+        .edit_user_group("group", "Local", "", "Local", UserGroupEdits::default())
+        .await;
+    assert!(matches!(result, Err(VclError::InvalidParameter(_))));
+}
+
 #[test]
 fn test_xmlrpc_test_request_format() {
     let request = build_request(
