@@ -452,6 +452,185 @@ fn test_parse_nested_array() {
 }
 
 #[test]
+fn test_parse_array_of_structs() {
+    // Shape returned by XMLRPCgetImages, XMLRPCgetRequestIds, XMLRPCgetUserGroups, etc.
+    let xml = r#"<?xml version="1.0"?>
+<methodResponse>
+  <params>
+    <param>
+      <value>
+        <array>
+          <data>
+            <value>
+              <struct>
+                <member><name>id</name><value><int>1</int></value></member>
+                <member><name>name</name><value><string>image-one</string></value></member>
+              </struct>
+            </value>
+            <value>
+              <struct>
+                <member><name>id</name><value><int>2</int></value></member>
+                <member><name>name</name><value><string>image-two</string></value></member>
+              </struct>
+            </value>
+          </data>
+        </array>
+      </value>
+    </param>
+  </params>
+</methodResponse>"#;
+
+    let result = parse_response(xml).unwrap();
+    assert!(result.is_array());
+    let arr = result.as_array().unwrap();
+    assert_eq!(arr.len(), 2);
+
+    assert_eq!(arr[0].get("id").and_then(|v| v.as_i64()), Some(1));
+    assert_eq!(
+        arr[0].get("name").and_then(|v| v.as_str()),
+        Some("image-one")
+    );
+    assert_eq!(arr[1].get("id").and_then(|v| v.as_i64()), Some(2));
+    assert_eq!(
+        arr[1].get("name").and_then(|v| v.as_str()),
+        Some("image-two")
+    );
+}
+
+#[test]
+fn test_parse_struct_containing_struct() {
+    let xml = r#"<?xml version="1.0"?>
+<methodResponse>
+  <params>
+    <param>
+      <value>
+        <struct>
+          <member>
+            <name>outer</name>
+            <value><string>outer-value</string></value>
+          </member>
+          <member>
+            <name>nested</name>
+            <value>
+              <struct>
+                <member><name>inner</name><value><string>inner-value</string></value></member>
+              </struct>
+            </value>
+          </member>
+        </struct>
+      </value>
+    </param>
+  </params>
+</methodResponse>"#;
+
+    let result = parse_response(xml).unwrap();
+    assert_eq!(
+        result.get("outer").and_then(|v| v.as_str()),
+        Some("outer-value")
+    );
+    let nested = result.get("nested").expect("should have 'nested' member");
+    assert!(nested.is_object());
+    assert_eq!(
+        nested.get("inner").and_then(|v| v.as_str()),
+        Some("inner-value")
+    );
+}
+
+#[test]
+fn test_parse_deeply_nested_mixed_structure() {
+    // struct -> array -> struct -> array, to confirm depth tracking holds
+    // through multiple levels and multiple sibling types.
+    let xml = r#"<?xml version="1.0"?>
+<methodResponse>
+  <params>
+    <param>
+      <value>
+        <struct>
+          <member>
+            <name>items</name>
+            <value>
+              <array>
+                <data>
+                  <value>
+                    <struct>
+                      <member>
+                        <name>tags</name>
+                        <value>
+                          <array>
+                            <data>
+                              <value><string>a</string></value>
+                              <value><string>b</string></value>
+                            </data>
+                          </array>
+                        </value>
+                      </member>
+                      <member><name>id</name><value><int>7</int></value></member>
+                    </struct>
+                  </value>
+                </data>
+              </array>
+            </value>
+          </member>
+        </struct>
+      </value>
+    </param>
+  </params>
+</methodResponse>"#;
+
+    let result = parse_response(xml).unwrap();
+    let items = result.get("items").unwrap().as_array().unwrap();
+    assert_eq!(items.len(), 1);
+
+    let item = &items[0];
+    assert_eq!(item.get("id").and_then(|v| v.as_i64()), Some(7));
+
+    let tags = item.get("tags").unwrap().as_array().unwrap();
+    assert_eq!(tags.len(), 2);
+    assert_eq!(tags[0].as_str(), Some("a"));
+    assert_eq!(tags[1].as_str(), Some("b"));
+}
+
+#[test]
+fn test_parse_response_invalid_int_is_error() {
+    let xml = r#"<?xml version="1.0"?>
+<methodResponse>
+  <params>
+    <param>
+      <value><int>not-a-number</int></value>
+    </param>
+  </params>
+</methodResponse>"#;
+
+    let result = parse_response(xml);
+    assert!(matches!(result, Err(VclError::XmlParseError(_))));
+}
+
+#[test]
+fn test_parse_response_invalid_boolean_is_error() {
+    let xml = r#"<?xml version="1.0"?>
+<methodResponse>
+  <params>
+    <param>
+      <value><boolean>maybe</boolean></value>
+    </param>
+  </params>
+</methodResponse>"#;
+
+    let result = parse_response(xml);
+    assert!(matches!(result, Err(VclError::XmlParseError(_))));
+}
+
+#[test]
+fn test_parse_response_missing_params_is_error() {
+    let xml = r#"<?xml version="1.0"?>
+<methodResponse>
+</methodResponse>"#;
+
+    let result = parse_response(xml);
+    assert!(matches!(result, Err(VclError::InvalidResponse(_))));
+}
+
+#[test]
 fn test_parse_struct_with_multiple_types() {
     let xml = r#"<?xml version="1.0"?>
 <methodResponse>
