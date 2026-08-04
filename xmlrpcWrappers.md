@@ -1,8 +1,29 @@
+## Observed access against NCSU's live VCL server (2026-08-03)
+
+Verified live against `vcl.ncsu.edu` using a standard (non-admin) NCSU
+account and vcl_lib's `vcl_probe` example crate. Confirmed working
+end-to-end: `XMLRPCtest`, `XMLRPCgetImages`, `XMLRPCgetRequestIds`,
+`XMLRPCaddRequest`, `XMLRPCgetRequestStatus`, `XMLRPCgetRequestConnectData`,
+`XMLRPCextendRequest`, `XMLRPCendRequest`, `XMLRPCgetUserGroups`. See
+per-method notes below for the methods that failed and why. Everything
+else in this document (privilege tree writes, user group writes, group
+membership, `XMLRPCautoCapture`) was not exercised against the live
+server - either because it mutates shared/institutional state rather than
+the caller's own reservations, or because no real identifier to test with
+could be discovered from this account's read-only access.
+
+One data-shape note for client implementers: this server encodes some
+nominally-numeric fields (e.g. `requestid` in `XMLRPCaddRequest`'s
+response, several fields in `XMLRPCgetUserGroups`' response) as XML-RPC
+`<string>` rather than `<int>`. Don't assume numeric response fields are
+typed as `<int>`.
+
 ### `XMLRPCaffiliations()`
 
 * **Description:** Gets all of the affiliations for which users can log in to VCL.
 * **Parameters:** None
 * **Note:** This is the only function available for which the `X-User` and `X-Pass` HTTP headers do not need to be passed.
+* **Observed:** Not exposed on NCSU's server - returns XML-RPC fault `-32601 method not found`.
 
 ### `XMLRPCtest($string)`
 
@@ -44,6 +65,7 @@
 * `$end`: The ending time.
 * `$foruser` (default `''`): The user the request is for (String).
 * `$nousercheck` (default `0`): Flag to skip user check (Integer).
+* **Observed:** Access denied for this account when an explicit `$end` is given - fault `errorcode 35 "access denied to specify end time"`. Same restriction as `XMLRPCsetRequestEnding` below. No reservation is created when this fires.
 
 
 
@@ -62,6 +84,7 @@
 * `$foruser` (default `''`): User string.
 * `$name` (default `''`): Name string.
 * `$userdata` (default `''`): User data string.
+* **Observed:** Access denied for this account - fault `errorcode 60 "access denied to deploy server"`. No reservation is created when this fires.
 
 
 
@@ -107,6 +130,7 @@
 * **Returns:** An array with at least one index named 'status' which will have one of these values:
 * `error` - error occurred; there will be 2 additional elements in the array: `errorcode` (error number) and `errormsg` (error string).
 * `success` - request was successfully extended.
+* **Observed:** Access denied for this account - fault `errorcode 35 "access denied to specify end time"`.
 
 
 
@@ -175,6 +199,7 @@
 * **Description:** Gets a list of all nodes in the privilege tree.
 * **Parameters:**
 * `$root` (default `NULL`): The root node.
+* **Observed:** Access denied for this account - fault `errorcode 70 "User cannot access node content"`. Standard accounts likely can't reach any of the privilege-tree or resource-group-privilege methods below; not independently verified since there's no way to discover a real node/group identifier without this call working first.
 
 
 
@@ -315,3 +340,64 @@
 * `$newInitialMaxTime` (default `''`): The new initial max time string.
 * `$newTotalMaxTime` (default `''`): The new total max time string.
 * `$newMaxExtendTime` (default `''`): The new max extend time string.
+
+## Methods available to the TUI's target audience
+
+The TUI targets NCSU students authenticating with a standard (non-admin) VCL
+account - the same population that currently uses the VCL web UI, not VCL
+administrators. This section filters the full method list above down to
+what that audience can actually call, based on live testing against
+`vcl.ncsu.edu` (see "Observed access" at the top of this document).
+
+### Usable today - build the TUI on these
+
+The full create -> monitor -> connect -> extend -> end lifecycle, confirmed
+working end-to-end:
+
+* `XMLRPCtest($string)` - connectivity/auth check.
+* `XMLRPCgetImages()` - list images available to reserve.
+* `XMLRPCaddRequest($imageid, $start, $length, $foruser='', $nousercheck=0)` - create a reservation.
+* `XMLRPCgetRequestIds()` - list your own requests.
+* `XMLRPCgetRequestStatus($requestid)` - poll a reservation's status.
+* `XMLRPCgetRequestConnectData($requestid, $remoteIP)` - get connect info once ready.
+* `XMLRPCextendRequest($requestid, $extendtime)` - extend an active reservation.
+* `XMLRPCendRequest($requestid)` - end/delete a reservation.
+* `XMLRPCgetUserGroups($groupType=0, $affiliationid=0)` - read-only; useful for context, not group management.
+
+`vcl_lib` also wraps one undocumented method, `XMLRPCgetIP`, used to fill in
+`$remoteIP` for `XMLRPCgetRequestConnectData` automatically - not part of the
+official spec, but confirmed working and safe to build on.
+
+### Confirmed blocked for this account type - don't build UI around these
+
+* `XMLRPCaffiliations()` - not exposed on this server at all (fault `-32601 method not found`).
+* `XMLRPCaddRequestWithEnding(...)` - access denied when an explicit end time is given (errorcode 35).
+* `XMLRPCdeployServer(...)` - access denied (errorcode 60); server deployment is an admin-tier feature.
+* `XMLRPCsetRequestEnding(...)` - access denied, same errorcode 35 as above.
+* `XMLRPCgetNodes(...)` - access denied (errorcode 70); privilege-tree browsing is admin-only.
+
+### Untested, but administrative in nature - assume unavailable
+
+Everything else in this document operates on shared/institutional state
+(privilege tree, resource groups, group membership) or has no undo path
+(`XMLRPCautoCapture`). None of it was exercised against the live server, but
+given the access-denied pattern above, a standard student account almost
+certainly can't reach it either:
+
+`XMLRPCautoCapture`, `XMLRPCgetGroupImages`, `XMLRPCaddImageToGroup`,
+`XMLRPCremoveImageFromGroup`, `XMLRPCaddImageGroupToComputerGroup`,
+`XMLRPCremoveImageGroupFromComputerGroup`, `XMLRPCnodeExists`,
+`XMLRPCaddNode`, `XMLRPCremoveNode`, `XMLRPCgetUserGroupPrivs`,
+`XMLRPCaddUserGroupPriv`, `XMLRPCremoveUserGroupPriv`,
+`XMLRPCgetResourceGroupPrivs`, `XMLRPCaddResourceGroupPriv`,
+`XMLRPCremoveResourceGroupPriv`, `XMLRPCgetUserGroupAttributes`,
+`XMLRPCaddUserGroup`, `XMLRPCeditUserGroup`.
+
+### Practical implication for the TUI
+
+Build the TUI around the 9 confirmed-working methods (plus `get_ip` for
+convenience) only: browse images, create a request, watch it move through
+statuses, connect once ready, optionally extend, and end it when done. Skip
+any UI affordance for scheduling an exact end time, server deployment, or
+group/privilege management - none of it will work for the account type this
+tool targets.
