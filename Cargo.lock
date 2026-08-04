@@ -2235,6 +2235,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "vcl_probe"
+version = "0.1.0"
+dependencies = [
+ "tokio",
+ "vcl_lib",
+]
+
+[[package]]
 name = "vcl_tui"
 version = "0.1.0"
 dependencies = [
