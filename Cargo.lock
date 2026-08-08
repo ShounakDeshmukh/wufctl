@@ -2699,11 +2699,13 @@ dependencies = [
  "dirs",
  "ratatui",
  "serde",
+ "tokio",
  "toml",
  "tracing",
  "tracing-appender",
  "tracing-error",
  "tracing-subscriber",
+ "vcl_lib",
 ]
 
 [[package]]
