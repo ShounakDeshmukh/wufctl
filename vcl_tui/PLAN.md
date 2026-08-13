@@ -477,19 +477,24 @@ toast rather than a panic.
    re-auth gate; only `Enter` with a valid token gets you back out). Not
    revisited here since it's a direct mockup-fidelity choice, not an
    oversight - flag to the user if this proves annoying in practice.
-5. **Revised after Images/Reservations were both underway: Images is not a
-   persistent tab.** The approved mockup gives Images/Reservations/Connect
-   three equal, always-present tabs with Images as the post-sign-in landing
-   screen - deliberately dropped. Instead: **Reservations is the landing
-   screen and the only persistent "home"**; `Screen::Images` is entered
-   only as a picker, reached via a "new reservation" key from Reservations,
-   and exits back to Reservations either on cancel (no reservation made) or
-   automatically after a successful `add_request` (not staying on Images).
-   The Images screen's own code (list, details, AVD branch) is unchanged by
-   this - only its entry point (a keypress from Reservations, not a
-   standalone tab) and its exit (always returns to Reservations) differ
-   from the original mockup. Connect is unaffected - still its own tab,
-   reachable from a ready row in Reservations.
+5. **Revised twice, now settled: no tabs at all - Reservations is the only
+   real screen, everything else is a popup or redirect over it.** The
+   approved mockup gives Images/Reservations/Connect three equal,
+   always-present tabs. First revision (mid-build) only dropped Images as a
+   tab, still assuming Connect stayed a tab reachable from a ready row.
+   Second revision (this one, once the actual implementation started)
+   dropped tabs entirely per direct instruction: `Screen` is now just
+   `{ Setup, Reservations }`. Images became `Popup::ImagePicker` - a big
+   `Clear` + centered-rect overlay (~80% of the terminal) drawn on top of
+   Reservations, not a screen swap - opened by `n` from Reservations,
+   closed by `Esc` back to Reservations, or by selecting a reservable image
+   which opens `Popup::NewReservationForm { image_idx }` (the confirm step,
+   its own popup layered on top of the picker). The Images list/details/AVD
+   branch rendering logic itself is unchanged, just now called as
+   `images::render_popup(app, frame)` inside a `Clear`+`centered_rect`
+   instead of owning the whole frame. Connect is deferred (not yet
+   designed) - "we'll get to connecting later" - but per this same
+   settled principle it will be a popup or redirect too, not a tab.
 
 ## Colors/styling
 

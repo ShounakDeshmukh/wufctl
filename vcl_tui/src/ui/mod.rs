@@ -10,7 +10,7 @@ use ratatui::{
     widgets::{Block, Borders, Clear, Paragraph},
 };
 
-use crate::state::{App, Screen};
+use crate::state::{App, Popup, Screen};
 use crate::theme;
 
 pub fn draw(app: &mut App, frame: &mut Frame) {
@@ -24,12 +24,48 @@ pub fn draw(app: &mut App, frame: &mut Frame) {
 
     match app.screen {
         Screen::Setup => setup::render(app, frame),
-        Screen::Images => images::render(app, frame),
         Screen::Reservations => reservations::render(app, frame),
-        _ => frame.render_widget(Paragraph::new("not yet implemented"), frame.area()),
+    }
+
+    // Popups are drawn on top of whatever screen is underneath, which
+    // keeps rendering (see `handle_key_event`'s input-swallowing note).
+    match app.popup {
+        Popup::None => {}
+        Popup::ImagePicker => images::render_popup(app, frame),
+        Popup::NewReservationForm { image_idx } => {
+            render_new_reservation_placeholder(app, frame, image_idx)
+        }
     }
 
     render_toast(app, frame);
+}
+
+/// Placeholder - the real Start/Duration form is step 4.
+fn render_new_reservation_placeholder(app: &App, frame: &mut Frame, image_idx: usize) {
+    let area = centered_rect(40, 9, frame.area());
+    frame.render_widget(Clear, area);
+    let block = Block::bordered().title("New Reservation");
+    let inner = block.inner(area);
+    frame.render_widget(block, area);
+
+    let name = app
+        .images
+        .images
+        .get(image_idx)
+        .map(|img| img.name.as_str())
+        .unwrap_or("(unknown)");
+    let lines = vec![
+        Line::from(format!("Image: {name}")),
+        Line::from(""),
+        Line::styled("Start/Duration form coming next.", theme::dim()),
+        Line::from(""),
+        Line::from(vec![
+            Span::styled("[Esc]", theme::accent()),
+            Span::raw(" "),
+            Span::styled("Back", theme::dim()),
+        ]),
+    ];
+    frame.render_widget(Paragraph::new(lines), inner);
 }
 
 /// Bottom-right, drawn last so it overlays whatever's underneath - matches

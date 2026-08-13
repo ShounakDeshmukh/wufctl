@@ -2,39 +2,45 @@ use ratatui::{
     Frame,
     layout::{Constraint, Layout, Rect},
     style::Modifier,
-    text::Line,
-    widgets::{Block, List, ListItem, Paragraph, Wrap},
+    text::{Line, Span},
+    widgets::{Block, Clear, List, ListItem, Paragraph, Wrap},
 };
 
 use crate::state::App;
 use crate::theme;
 
-pub fn render(app: &mut App, frame: &mut Frame) {
-    let [top_bar_area, pane_area] =
-        Layout::vertical([Constraint::Length(2), Constraint::Min(0)]).areas(frame.area());
-
-    super::render_top_bar(app, frame, top_bar_area);
+/// Big popup over Reservations (`Clear` + a centered rect at ~80% of the
+/// terminal), not a full-screen render - Images isn't a standalone tab
+/// anymore, only reachable via `n` from Reservations.
+pub fn render_popup(app: &mut App, frame: &mut Frame) {
+    let full = frame.area();
+    let area = super::centered_rect(full.width * 4 / 5, full.height * 4 / 5, full);
+    frame.render_widget(Clear, area);
 
     if let Some(err) = &app.images.error {
         frame.render_widget(
             Paragraph::new(err.as_str())
                 .style(theme::danger())
                 .block(Block::bordered().title("Images")),
-            pane_area,
+            area,
         );
         return;
     }
 
     let [list_area, details_area] =
-        Layout::horizontal([Constraint::Percentage(40), Constraint::Percentage(60)])
-            .areas(pane_area);
+        Layout::horizontal([Constraint::Percentage(40), Constraint::Percentage(60)]).areas(area);
 
     render_list(app, frame, list_area);
     render_details(app, frame, details_area);
 }
 
 fn render_list(app: &mut App, frame: &mut Frame, area: Rect) {
-    let block = Block::bordered().title("Images");
+    let block = Block::bordered()
+        .title("Images")
+        .title_bottom(Line::from(vec![
+            Span::styled("[Esc]", theme::accent()),
+            Span::raw(" Cancel"),
+        ]));
     // Image names are often a single unspaced token, so a plain char-chunk
     // wrap (not word-wrap) is what actually keeps a long name on-screen.
     let wrap_width = block.inner(area).width.max(1) as usize;
@@ -76,6 +82,12 @@ fn render_details(app: &App, frame: &mut Frame, area: Rect) {
             Line::from(format!("OS: {}", img.ostype)),
             Line::from(format!("Usage: {}", img.usage)),
             Line::from(format!("Description: {}", img.description)),
+            Line::from(""),
+            Line::from(vec![
+                Span::styled("[n]", theme::accent()),
+                Span::raw(" "),
+                Span::styled("Reserve this image", theme::dim()),
+            ]),
         ]
     } else {
         vec![

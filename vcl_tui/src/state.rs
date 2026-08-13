@@ -1,11 +1,23 @@
 use crate::config::Config;
 
+/// Only two real screens now - Images/Connect are popups or redirects
+/// over Reservations (see PLAN.md's nav-redesign scope decision), not
+/// standalone tabs.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Screen {
     Setup,
-    Images,
     Reservations,
-    Connect,
+}
+
+/// At most one popup open at a time, layered over `Screen::Reservations`.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub enum Popup {
+    #[default]
+    None,
+    ImagePicker,
+    NewReservationForm {
+        image_idx: usize,
+    },
 }
 
 #[derive(Debug, Default)]
@@ -87,6 +99,7 @@ pub struct Toast {
 
 pub struct App {
     pub screen: Screen,
+    pub popup: Popup,
     pub config: Option<Config>,
     pub exit: bool,
     pub async_runtime: tokio::runtime::Runtime,

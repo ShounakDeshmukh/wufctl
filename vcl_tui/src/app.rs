@@ -1,6 +1,7 @@
 use crate::config::Config;
 use crate::state::{
-    App, ImagesUiState, Reservation, ReservationsUiState, Screen, SetupState, SetupUiState, Toast,
+    App, ImagesUiState, Popup, Reservation, ReservationsUiState, Screen, SetupState, SetupUiState,
+    Toast,
 };
 use crossterm::event::{self, Event, KeyCode, KeyEventKind, KeyModifiers};
 use ratatui::DefaultTerminal;
@@ -29,6 +30,7 @@ impl App {
             .build()?;
         Ok(App {
             screen,
+            popup: Popup::None,
             config,
             exit: false,
             async_runtime: rt,
@@ -49,7 +51,7 @@ impl App {
 
     pub fn run(&mut self, terminal: &mut DefaultTerminal) -> color_eyre::Result<()> {
         while !self.exit {
-            if self.screen == Screen::Images && !self.images.loaded {
+            if self.popup == Popup::ImagePicker && !self.images.loaded {
                 self.load_images()?;
             }
             if self.screen == Screen::Reservations && self.should_auto_poll_reservations() {
@@ -197,11 +199,19 @@ impl App {
             return Ok(());
         }
 
+        // A popup swallows all keys - it takes priority over the screen
+        // underneath, which keeps rendering but shouldn't react to input.
+        match self.popup {
+            Popup::None => {}
+            Popup::ImagePicker => return self.handle_image_picker_key(key_event),
+            Popup::NewReservationForm { image_idx } => {
+                return self.handle_new_reservation_key(key_event, image_idx);
+            }
+        }
+
         match self.screen {
             Screen::Setup => self.handle_setup_key(key_event, terminal)?,
-            Screen::Images => self.handle_images_key(key_event),
             Screen::Reservations => self.handle_reservations_key(key_event)?,
-            _ => {}
         }
 
         Ok(())
@@ -225,6 +235,13 @@ impl App {
                     remaining.as_secs() + 1
                 )));
             }
+            return Ok(());
+        }
+
+        if key_event.code == KeyCode::Char('n') {
+            self.popup = Popup::ImagePicker;
+            // Force a fresh fetch each time the picker opens.
+            self.images.loaded = false;
             return Ok(());
         }
 
@@ -280,10 +297,18 @@ impl App {
         });
     }
 
-    fn handle_images_key(&mut self, key_event: crossterm::event::KeyEvent) {
+    fn handle_image_picker_key(
+        &mut self,
+        key_event: crossterm::event::KeyEvent,
+    ) -> color_eyre::Result<()> {
+        if key_event.code == KeyCode::Esc {
+            self.popup = Popup::None;
+            return Ok(());
+        }
+
         let len = self.images.images.len();
         if len == 0 {
-            return;
+            return Ok(());
         }
         let i = self.images.list_state.selected().unwrap_or(0);
         match key_event.code {
@@ -297,13 +322,28 @@ impl App {
             }
             KeyCode::Char('n') | KeyCode::Enter => {
                 let img = &self.images.images[i];
-                if !img.is_reservable() {
+                if img.is_reservable() {
+                    self.popup = Popup::NewReservationForm { image_idx: i };
+                } else {
                     self.open_avd_guide();
                 }
-                // reservable branch (New Reservation popup) is step 4, not yet wired.
             }
             _ => {}
         }
+        Ok(())
+    }
+
+    /// Placeholder - the actual Start/Duration form is step 4.
+    fn handle_new_reservation_key(
+        &mut self,
+        key_event: crossterm::event::KeyEvent,
+        _image_idx: usize,
+    ) -> color_eyre::Result<()> {
+        if key_event.code == KeyCode::Esc {
+            // Back one step, to the picker - not all the way to Reservations.
+            self.popup = Popup::ImagePicker;
+        }
+        Ok(())
     }
 
     /// Debounced so spamming `n` can't spawn a browser per keypress.
