@@ -3,7 +3,7 @@ use ratatui::{
     layout::{Constraint, Layout, Rect},
     style::Modifier,
     text::Line,
-    widgets::{Block, List, ListItem, Paragraph},
+    widgets::{Block, List, ListItem, Paragraph, Wrap},
 };
 
 use crate::state::App;
@@ -93,5 +93,5 @@ fn render_details(app: &App, frame: &mut Frame, area: Rect) {
         lines.push(Line::from(""));
         lines.push(Line::styled(text, style));
     }
-    frame.render_widget(Paragraph::new(lines), inner);
+    frame.render_widget(Paragraph::new(lines).wrap(Wrap { trim: false }), inner);
 }
