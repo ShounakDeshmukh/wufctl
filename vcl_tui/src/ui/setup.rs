@@ -6,14 +6,14 @@ use ratatui::{
     widgets::{Block, Paragraph},
 };
 
-use crate::app::{App, SetupState};
+use crate::state::{App, SetupState};
 use crate::theme;
 
 pub fn render(app: &App, frame: &mut Frame) {
     let [top_bar_area, pane_area] =
-        Layout::vertical([Constraint::Length(1), Constraint::Min(0)]).areas(frame.area());
+        Layout::vertical([Constraint::Length(2), Constraint::Min(0)]).areas(frame.area());
 
-    render_top_bar(frame, top_bar_area);
+    super::render_top_bar(app, frame, top_bar_area);
 
     let card_area = super::centered_rect(60, 16, pane_area);
     let block = Block::bordered().title("Setup");
@@ -85,22 +85,6 @@ pub fn render(app: &App, frame: &mut Frame) {
     );
 
     render_footer(frame, footer);
-}
-
-fn render_top_bar(frame: &mut Frame, area: ratatui::layout::Rect) {
-    let right_text = "\u{25cb} not signed in";
-
-    let [left_area, right_area] = Layout::horizontal([
-        Constraint::Fill(1),
-        Constraint::Length(right_text.chars().count() as u16),
-    ])
-    .areas(area);
-
-    frame.render_widget(
-        Paragraph::new("vcl_tui  NCSU VCL").style(theme::dim()),
-        left_area,
-    );
-    frame.render_widget(Paragraph::new(right_text).style(theme::dim()), right_area);
 }
 
 fn render_input(app: &App, frame: &mut Frame, area: ratatui::layout::Rect) {
