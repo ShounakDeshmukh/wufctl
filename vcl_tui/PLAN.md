@@ -124,14 +124,18 @@ Per-screen, one sub-struct per screen as its own field on `App`:
 - `connect: ConnectUiState { cache: Option<(i64, ConnectData)>, my_ip: Option<String> }`
 
 ```rust
-/// Local view-model row. get_request_status alone never carries an image
-/// name (see RESPONSE_SHAPES.md), so this is populated at creation time
-/// from the New Reservation flow; a reservation discovered fresh via
-/// get_request_ids() on a new session has no known image name and should
-/// render as "Reservation #<id>" instead of guessing.
+/// Local view-model row. **Revised after live verification**: the plan
+/// originally assumed get_request_ids() carried no image name (its
+/// `requests` array was empty during the initial probe, leaving the
+/// element shape UNCONFIRMED) and planned to track image_name locally,
+/// only known for a reservation created this session. A live call once a
+/// real reservation existed showed each element is a full struct with an
+/// `imagename` field (and the id key is `requestid`, not `id`) - so the
+/// name is always available for free and image_name is a plain String,
+/// not Option<String>.
 pub struct Reservation {
     pub id: i64,
-    pub image_name: Option<String>,
+    pub image_name: String,
     pub status: RequestStatus,
 }
 ```

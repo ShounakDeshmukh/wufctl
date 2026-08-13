@@ -1,0 +1,127 @@
+use ratatui::{
+    Frame,
+    layout::{Constraint, Layout, Rect},
+    style::{Modifier, Style},
+    text::{Line, Span},
+    widgets::{Block, List, ListItem, Paragraph, Wrap},
+};
+
+use crate::state::App;
+use crate::theme;
+
+pub fn render(app: &mut App, frame: &mut Frame) {
+    let [top_bar_area, pane_area] =
+        Layout::vertical([Constraint::Length(2), Constraint::Min(0)]).areas(frame.area());
+
+    super::render_top_bar(app, frame, top_bar_area);
+
+    if let Some(err) = &app.reservations.error {
+        frame.render_widget(
+            Paragraph::new(err.as_str())
+                .style(theme::danger())
+                .block(Block::bordered().title("Reservations")),
+            pane_area,
+        );
+        return;
+    }
+
+    let [list_area, details_area] =
+        Layout::horizontal([Constraint::Percentage(40), Constraint::Percentage(60)])
+            .areas(pane_area);
+
+    render_list(app, frame, list_area);
+    render_details(app, frame, details_area);
+}
+
+fn status_style(status: &str) -> Style {
+    match status {
+        "ready" => theme::success(),
+        "loading" => theme::pending(),
+        _ => theme::info(),
+    }
+}
+
+fn render_list(app: &mut App, frame: &mut Frame, area: Rect) {
+    let items: Vec<ListItem> = app
+        .reservations
+        .reservations
+        .iter()
+        .map(|r| {
+            ListItem::new(Line::from(vec![
+                Span::raw(r.image_name.clone()),
+                Span::raw(" "),
+                Span::styled(
+                    format!("[{}]", r.status.status),
+                    status_style(&r.status.status),
+                ),
+            ]))
+        })
+        .collect();
+    let list = List::new(items)
+        .block(Block::bordered().title("Reservations"))
+        .highlight_style(theme::accent().add_modifier(Modifier::REVERSED));
+    frame.render_stateful_widget(list, area, &mut app.reservations.list_state);
+}
+
+fn render_details(app: &App, frame: &mut Frame, area: Rect) {
+    let block = Block::bordered().title("Details");
+    let inner = block.inner(area);
+    frame.render_widget(block, area);
+
+    let Some(i) = app.reservations.list_state.selected() else {
+        frame.render_widget(Paragraph::new("No reservation selected"), inner);
+        return;
+    };
+    let r = &app.reservations.reservations[i];
+
+    let mut lines = vec![
+        Line::from(format!("ID: #{}", r.id)),
+        Line::from(format!("Image: {}", r.image_name)),
+        Line::from(vec![
+            Span::raw("Status: "),
+            Span::styled(&r.status.status, status_style(&r.status.status)),
+        ]),
+    ];
+
+    lines.push(Line::from(""));
+    match r.status.status.as_str() {
+        "ready" => {
+            lines.push(Line::from(vec![
+                Span::styled("[c]", theme::accent()),
+                Span::raw(" "),
+                Span::styled("Connect", theme::dim()),
+                Span::raw("   "),
+                Span::styled("[e]", theme::accent()),
+                Span::raw(" "),
+                Span::styled("Extend +15m", theme::dim()),
+            ]));
+            lines.push(Line::from(vec![
+                Span::styled("[x]", theme::accent()),
+                Span::raw(" "),
+                Span::styled("End reservation", theme::dim()),
+            ]));
+        }
+        "loading" => lines.push(Line::styled("Provisioning image...", theme::dim())),
+        // RESPONSE_SHAPES.md only confirms loading/ready live - anything
+        // else (expired/deleted/etc.) just shows its raw status here.
+        other => lines.push(Line::styled(format!("Status: {other}"), theme::dim())),
+    }
+
+    if let Some(msg) = &app.reservations.message {
+        let (text, style) = match msg {
+            Ok(text) => (text.as_str(), theme::success()),
+            Err(text) => (text.as_str(), theme::danger()),
+        };
+        lines.push(Line::from(""));
+        lines.push(Line::styled(text, style));
+    }
+
+    lines.push(Line::from(""));
+    lines.push(Line::from(vec![
+        Span::styled("[n]", theme::accent()),
+        Span::raw(" "),
+        Span::styled("New reservation", theme::dim()),
+    ]));
+
+    frame.render_widget(Paragraph::new(lines).wrap(Wrap { trim: false }), inner);
+}

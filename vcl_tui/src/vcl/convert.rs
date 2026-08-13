@@ -1,7 +1,7 @@
 use color_eyre::eyre::{ContextCompat, Result};
 use vcl_lib::Value;
 
-use super::model::Image;
+use super::model::{ActionResult, Image, RequestListEntry, RequestStatus};
 
 /// Accepts `Value::Int` or a parseable `Value::String` - the server's
 /// inconsistent numeric typing (see RESPONSE_SHAPES.md).
@@ -32,6 +32,51 @@ impl TryFrom<&Value> for Image {
             ostype: field_str(v, "ostype")?,
             usage: field_str(v, "usage")?,
             description: field_str(v, "description")?,
+        })
+    }
+}
+
+impl TryFrom<&Value> for RequestStatus {
+    type Error = color_eyre::eyre::Report;
+
+    fn try_from(v: &Value) -> Result<Self> {
+        Ok(RequestStatus {
+            status: field_str(v, "status")?,
+            time: field(v, "time")
+                .ok()
+                .map(|t| coerce_i64(t, "time"))
+                .transpose()?,
+        })
+    }
+}
+
+impl TryFrom<&Value> for ActionResult {
+    type Error = color_eyre::eyre::Report;
+
+    fn try_from(v: &Value) -> Result<Self> {
+        if field_str(v, "status")? == "success" {
+            Ok(ActionResult::Success {
+                requestid: field(v, "requestid")
+                    .ok()
+                    .map(|r| coerce_i64(r, "requestid"))
+                    .transpose()?,
+            })
+        } else {
+            Ok(ActionResult::Error {
+                errorcode: coerce_i64(field(v, "errorcode")?, "errorcode")?,
+                errormsg: field_str(v, "errormsg")?,
+            })
+        }
+    }
+}
+
+impl TryFrom<&Value> for RequestListEntry {
+    type Error = color_eyre::eyre::Report;
+
+    fn try_from(v: &Value) -> Result<Self> {
+        Ok(RequestListEntry {
+            requestid: coerce_i64(field(v, "requestid")?, "requestid")?,
+            imagename: field_str(v, "imagename")?,
         })
     }
 }
@@ -94,5 +139,104 @@ mod tests {
         map.insert("description".to_string(), Value::String(String::new()));
         let img = Image::try_from(&Value::Struct(map)).unwrap();
         assert!(!img.is_reservable());
+    }
+
+    #[test]
+    fn request_status_loading_has_time() {
+        let mut map = HashMap::new();
+        map.insert("status".to_string(), Value::String("loading".to_string()));
+        map.insert("time".to_string(), Value::Int(1));
+        let status = RequestStatus::try_from(&Value::Struct(map)).unwrap();
+        assert_eq!(status.status, "loading");
+        assert_eq!(status.time, Some(1));
+    }
+
+    #[test]
+    fn request_status_ready_has_no_time() {
+        let mut map = HashMap::new();
+        map.insert("status".to_string(), Value::String("ready".to_string()));
+        let status = RequestStatus::try_from(&Value::Struct(map)).unwrap();
+        assert_eq!(status.status, "ready");
+        assert_eq!(status.time, None);
+    }
+
+    #[test]
+    fn action_result_success() {
+        let mut map = HashMap::new();
+        map.insert("status".to_string(), Value::String("success".to_string()));
+        map.insert(
+            "requestid".to_string(),
+            Value::String("4214683".to_string()),
+        );
+        match ActionResult::try_from(&Value::Struct(map)).unwrap() {
+            ActionResult::Success { requestid } => assert_eq!(requestid, Some(4214683)),
+            ActionResult::Error { .. } => panic!("expected Success"),
+        }
+    }
+
+    #[test]
+    fn action_result_success_without_requestid() {
+        let mut map = HashMap::new();
+        map.insert("status".to_string(), Value::String("success".to_string()));
+        match ActionResult::try_from(&Value::Struct(map)).unwrap() {
+            ActionResult::Success { requestid } => assert_eq!(requestid, None),
+            ActionResult::Error { .. } => panic!("expected Success"),
+        }
+    }
+
+    #[test]
+    fn action_result_error() {
+        let mut map = HashMap::new();
+        map.insert("status".to_string(), Value::String("error".to_string()));
+        map.insert("errorcode".to_string(), Value::Int(24));
+        map.insert(
+            "errormsg".to_string(),
+            Value::String("reservation length exceeds max".to_string()),
+        );
+        match ActionResult::try_from(&Value::Struct(map)).unwrap() {
+            ActionResult::Success { .. } => panic!("expected Error"),
+            ActionResult::Error {
+                errorcode,
+                errormsg,
+            } => {
+                assert_eq!(errorcode, 24);
+                assert_eq!(errormsg, "reservation length exceeds max");
+            }
+        }
+    }
+
+    #[test]
+    fn request_list_entry_from_live_shape() {
+        // Fixture captured live via get_request_ids() - each `requests[]`
+        // element is a full struct (id key is `requestid`, not `id`), not
+        // the bare scalar this code originally assumed.
+        let mut map = HashMap::new();
+        map.insert("isserver".to_string(), Value::Int(0));
+        map.insert("serverowner".to_string(), Value::Int(1));
+        map.insert("state".to_string(), Value::String("reserved".to_string()));
+        map.insert("imageid".to_string(), Value::String("7414".to_string()));
+        map.insert("ostype".to_string(), Value::String("linux".to_string()));
+        map.insert(
+            "requestid".to_string(),
+            Value::String("4214792".to_string()),
+        );
+        map.insert(
+            "imagename".to_string(),
+            Value::String("Ubuntu 22 GPU with Cuda (GeForce RTX 2080 Ti)".to_string()),
+        );
+        map.insert(
+            "OS".to_string(),
+            Value::String("Ubuntu (VMware)".to_string()),
+        );
+        map.insert("end".to_string(), Value::Int(1786684500));
+        map.insert("admin".to_string(), Value::Int(1));
+        map.insert("start".to_string(), Value::Int(1786662000));
+
+        let entry = RequestListEntry::try_from(&Value::Struct(map)).unwrap();
+        assert_eq!(entry.requestid, 4214792);
+        assert_eq!(
+            entry.imagename,
+            "Ubuntu 22 GPU with Cuda (GeForce RTX 2080 Ti)"
+        );
     }
 }

@@ -1,4 +1,5 @@
 pub mod images;
+pub mod reservations;
 pub mod setup;
 
 use ratatui::{
@@ -16,6 +17,7 @@ pub fn draw(app: &mut App, frame: &mut Frame) {
     match app.screen {
         Screen::Setup => setup::render(app, frame),
         Screen::Images => images::render(app, frame),
+        Screen::Reservations => reservations::render(app, frame),
         _ => frame.render_widget(Paragraph::new("not yet implemented"), frame.area()),
     }
 }

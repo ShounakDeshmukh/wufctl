@@ -1,5 +1,7 @@
 use crate::config::Config;
-use crate::state::{App, ImagesUiState, Screen, SetupState, SetupUiState};
+use crate::state::{
+    App, ImagesUiState, Reservation, ReservationsUiState, Screen, SetupState, SetupUiState,
+};
 use crossterm::event::{self, Event, KeyCode, KeyEventKind, KeyModifiers};
 use ratatui::DefaultTerminal;
 const VCL_ENDPOINT: &str = "https://vcl.ncsu.edu/scheduling/index.php?mode=xmlrpccall";
@@ -8,7 +10,7 @@ impl App {
     pub fn new() -> color_eyre::Result<Self> {
         let config = Config::load()?;
         let screen = match &config {
-            Some(_) => Screen::Images,
+            Some(_) => Screen::Reservations,
             None => Screen::Setup,
         };
         let client = config
@@ -25,6 +27,7 @@ impl App {
             client,
             setup: SetupUiState::default(),
             images: ImagesUiState::default(),
+            reservations: ReservationsUiState::default(),
         })
     }
 
@@ -32,6 +35,9 @@ impl App {
         while !self.exit {
             if self.screen == Screen::Images && !self.images.loaded {
                 self.load_images()?;
+            }
+            if self.screen == Screen::Reservations && !self.reservations.loaded {
+                self.load_reservations()?;
             }
             terminal.draw(|f| crate::ui::draw(self, f))?;
             self.handle_events(terminal)?;
@@ -56,6 +62,57 @@ impl App {
             Err(err) => self.images.error = Some(format!("{err:#}")),
         }
         self.images.loaded = true;
+        Ok(())
+    }
+
+    /// Fetches the list (id + image name, both confirmed live in
+    /// `get_request_ids()`'s response) then one status per id.
+    fn load_reservations(&mut self) -> color_eyre::Result<()> {
+        let Some(client) = &self.client else {
+            return Ok(());
+        };
+        let entries = match self
+            .async_runtime
+            .block_on(crate::vcl::get_request_ids(client))
+        {
+            Ok(entries) => entries,
+            Err(err) => {
+                self.reservations.error = Some(format!("{err:#}"));
+                self.reservations.loaded = true;
+                return Ok(());
+            }
+        };
+
+        let mut reservations = Vec::with_capacity(entries.len());
+        for entry in entries {
+            let status = match self
+                .async_runtime
+                .block_on(crate::vcl::get_request_status(client, entry.requestid))
+            {
+                Ok(status) => status,
+                Err(err) => {
+                    self.reservations.error = Some(format!("{err:#}"));
+                    self.reservations.loaded = true;
+                    return Ok(());
+                }
+            };
+            reservations.push(Reservation {
+                id: entry.requestid,
+                image_name: entry.imagename,
+                status,
+            });
+        }
+
+        self.reservations
+            .list_state
+            .select(if reservations.is_empty() {
+                None
+            } else {
+                Some(0)
+            });
+        self.reservations.reservations = reservations;
+        self.reservations.error = None;
+        self.reservations.loaded = true;
         Ok(())
     }
 
@@ -97,10 +154,63 @@ impl App {
         match self.screen {
             Screen::Setup => self.handle_setup_key(key_event, terminal)?,
             Screen::Images => self.handle_images_key(key_event),
+            Screen::Reservations => self.handle_reservations_key(key_event),
             _ => {}
         }
 
         Ok(())
+    }
+
+    fn handle_reservations_key(&mut self, key_event: crossterm::event::KeyEvent) {
+        let len = self.reservations.reservations.len();
+        if len == 0 {
+            return;
+        }
+        let i = self.reservations.list_state.selected().unwrap_or(0);
+        let status = self.reservations.reservations[i].status.status.clone();
+        match key_event.code {
+            KeyCode::Up => {
+                self.reservations
+                    .list_state
+                    .select(Some(i.saturating_sub(1)));
+                self.reservations.message = None;
+            }
+            KeyCode::Down => {
+                self.reservations
+                    .list_state
+                    .select(Some((i + 1).min(len - 1)));
+                self.reservations.message = None;
+            }
+            KeyCode::Char('x') if status == "ready" => self.end_reservation(i),
+            KeyCode::Char('e') if status == "ready" => todo!("extend_request - not built yet"),
+            _ => {}
+        }
+    }
+
+    fn end_reservation(&mut self, i: usize) {
+        let Some(client) = &self.client else { return };
+        let id = self.reservations.reservations[i].id;
+        let result = self
+            .async_runtime
+            .block_on(crate::vcl::end_request(client, id));
+        self.reservations.message = Some(match result {
+            Ok(crate::vcl::ActionResult::Success { .. }) => {
+                self.reservations.reservations.remove(i);
+                self.reservations
+                    .list_state
+                    .select(if self.reservations.reservations.is_empty() {
+                        None
+                    } else {
+                        Some(i.min(self.reservations.reservations.len() - 1))
+                    });
+                Ok(format!("Reservation #{id} ended."))
+            }
+            Ok(crate::vcl::ActionResult::Error {
+                errorcode,
+                errormsg,
+            }) => Err(format!("[{errorcode}] {errormsg}")),
+            Err(err) => Err(format!("{err:#}")),
+        });
     }
 
     fn handle_images_key(&mut self, key_event: crossterm::event::KeyEvent) {
@@ -221,7 +331,7 @@ impl App {
                     Ok(()) => {
                         self.client = Some(client);
                         self.config = Some(config);
-                        self.screen = Screen::Images;
+                        self.screen = Screen::Reservations;
                         self.setup = SetupUiState::default();
                     }
                     Err(err) => self.setup.state = SetupState::Error(format!("{err:#}")),
