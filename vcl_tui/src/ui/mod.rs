@@ -7,7 +7,7 @@ use ratatui::{
     layout::{Constraint, Layout, Rect},
     style::Modifier,
     text::{Line, Span},
-    widgets::{Block, Borders, Paragraph},
+    widgets::{Block, Borders, Clear, Paragraph},
 };
 
 use crate::state::{App, Screen};
@@ -33,25 +33,32 @@ pub fn draw(app: &mut App, frame: &mut Frame) {
 }
 
 /// Bottom-right, drawn last so it overlays whatever's underneath - matches
-/// the approved mockup's own toast (`"> " + msg`), just terminal-side.
+/// the approved mockup's own toast (`"> " + msg`), plus a border since it's
+/// a floating overlay rather than inline status-bar text like the mockup.
 fn render_toast(app: &App, frame: &mut Frame) {
     let Some(toast) = &app.toast else { return };
-    let (text, style) = match &toast.text {
+    let (message, style) = match &toast.text {
         Ok(t) => (t.as_str(), theme::success()),
         Err(t) => (t.as_str(), theme::danger()),
     };
-    let text = format!("> {text}");
+    let text = format!("> {message}");
     let area = frame.area();
-    let width = (text.chars().count() as u16).min(area.width);
+    let width = (text.chars().count() as u16 + 2).min(area.width);
+    let height = 3.min(area.height);
     let toast_area = Rect {
-        x: area.width - width,
-        y: area.height.saturating_sub(1),
+        x: area.width.saturating_sub(width),
+        y: area.height.saturating_sub(height),
         width,
-        height: 1,
+        height,
     };
+
+    frame.render_widget(Clear, toast_area);
+    let block = Block::bordered().border_style(style);
+    let inner = block.inner(toast_area);
+    frame.render_widget(block, toast_area);
     frame.render_widget(
         Paragraph::new(text).style(style.add_modifier(Modifier::BOLD)),
-        toast_area,
+        inner,
     );
 }
 

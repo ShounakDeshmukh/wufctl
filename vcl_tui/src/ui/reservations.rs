@@ -74,8 +74,15 @@ fn render_details(app: &App, frame: &mut Frame, area: Rect) {
     let inner = block.inner(area);
     frame.render_widget(block, area);
 
+    // `load_reservations` only ever leaves the selection unset when the
+    // list itself is empty (non-empty always selects an index), so this
+    // branch is specifically "you have zero reservations", not "you have
+    // some but haven't picked one".
     let Some(i) = app.reservations.list_state.selected() else {
-        frame.render_widget(Paragraph::new("No reservation selected"), inner);
+        frame.render_widget(
+            Paragraph::new("You have no current reservations.").style(theme::dim()),
+            inner,
+        );
         return;
     };
     let r = &app.reservations.reservations[i];
