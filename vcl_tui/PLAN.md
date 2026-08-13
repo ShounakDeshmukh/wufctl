@@ -496,6 +496,25 @@ toast rather than a panic.
    designed) - "we'll get to connecting later" - but per this same
    settled principle it will be a popup or redirect too, not a tab.
 
+   **Why two separate popups (picker, then form) rather than one combined
+   popup or folding image choice into a form field**: this is the standard
+   terminal-wizard shape (`nmtui`, `dialog`/`whiptail` chain separate
+   focused dialogs rather than one mega-dialog), and it fits the two
+   interactions involved, which are genuinely different. Image selection
+   needs real browsing - a list with a details pane, potentially many
+   images, each with OS/usage/description text - that doesn't compress
+   into a single cycled field. Start/Duration are small fixed sets (a day
+   offset, a time, a duration preset) that a spinner-style field (`Left`/
+   `Right` cycles the focused row's value, `Up`/`Down` moves between rows)
+   handles well, and forcing that into the same popup as the image list
+   would cramp one or bloat the other. This gives a two-level back stack,
+   not a real stack (only ever two levels, so no stack data structure
+   needed): `Esc` on the form goes back one step to the picker (keeping
+   the picking-mode context), `Esc` on the picker cancels the whole flow
+   back to Reservations. A successful submit is terminal for the entire
+   flow, not just one step - it closes both popups at once and forces a
+   Reservations refresh, not just the form.
+
 ## Colors/styling
 
 **Revised twice.** First pass used NC State's official brand palette
