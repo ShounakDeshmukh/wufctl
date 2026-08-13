@@ -43,7 +43,7 @@ impl App {
             if self.screen == Screen::Images && !self.images.loaded {
                 self.load_images()?;
             }
-            if self.screen == Screen::Reservations && self.reservations_poll_due() {
+            if self.screen == Screen::Reservations && self.should_auto_poll_reservations() {
                 self.load_reservations()?;
             }
             terminal.draw(|f| crate::ui::draw(self, f))?;
@@ -73,11 +73,26 @@ impl App {
     }
 
     /// `true` on first load, or once `RESERVATIONS_POLL_INTERVAL` has
-    /// passed since the last one - shared by the auto-poll and `r`.
+    /// passed since the last one - the `r` refresh debounce.
     fn reservations_poll_due(&self) -> bool {
         self.reservations
             .last_poll
             .is_none_or(|t| t.elapsed() >= RESERVATIONS_POLL_INTERVAL)
+    }
+
+    /// Auto-poll only runs the initial load plus, while something is still
+    /// `loading`, one refresh per `RESERVATIONS_POLL_INTERVAL` - once
+    /// everything has settled it stops, and only `r` refreshes from there.
+    fn should_auto_poll_reservations(&self) -> bool {
+        if self.reservations.last_poll.is_none() {
+            return true;
+        }
+        self.reservations_poll_due()
+            && self
+                .reservations
+                .reservations
+                .iter()
+                .any(|r| r.status.status == "loading")
     }
 
     /// Fetches the list (id + image name, both confirmed live in
