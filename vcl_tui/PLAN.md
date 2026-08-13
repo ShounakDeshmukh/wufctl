@@ -473,6 +473,19 @@ toast rather than a panic.
    re-auth gate; only `Enter` with a valid token gets you back out). Not
    revisited here since it's a direct mockup-fidelity choice, not an
    oversight - flag to the user if this proves annoying in practice.
+5. **Revised after Images/Reservations were both underway: Images is not a
+   persistent tab.** The approved mockup gives Images/Reservations/Connect
+   three equal, always-present tabs with Images as the post-sign-in landing
+   screen - deliberately dropped. Instead: **Reservations is the landing
+   screen and the only persistent "home"**; `Screen::Images` is entered
+   only as a picker, reached via a "new reservation" key from Reservations,
+   and exits back to Reservations either on cancel (no reservation made) or
+   automatically after a successful `add_request` (not staying on Images).
+   The Images screen's own code (list, details, AVD branch) is unchanged by
+   this - only its entry point (a keypress from Reservations, not a
+   standalone tab) and its exit (always returns to Reservations) differ
+   from the original mockup. Connect is unaffected - still its own tab,
+   reachable from a ready row in Reservations.
 
 ## Colors/styling
 
