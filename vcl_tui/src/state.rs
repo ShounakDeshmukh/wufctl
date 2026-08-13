@@ -63,6 +63,31 @@ pub struct ImagesUiState {
     pub message: Option<Result<String, String>>,
     /// Debounces `n` so spamming it can't spawn a browser per keypress.
     pub last_avd_open: Option<std::time::Instant>,
+    /// `/`-triggered incremental filter, vim/less-style. `list_state`
+    /// indexes into `visible_indices()`, not directly into `images`.
+    pub search: String,
+    /// Char index (not byte index) of the insertion point within `search`.
+    pub search_cursor: usize,
+    /// `true` while actively editing `search` (keys go to the query
+    /// instead of list navigation); the filter still applies when `false`.
+    pub searching: bool,
+}
+
+impl ImagesUiState {
+    /// Indices into `images` matching `search` (case-insensitive substring
+    /// of the name), or every index when `search` is empty.
+    pub fn visible_indices(&self) -> Vec<usize> {
+        if self.search.is_empty() {
+            return (0..self.images.len()).collect();
+        }
+        let query = self.search.to_lowercase();
+        self.images
+            .iter()
+            .enumerate()
+            .filter(|(_, img)| img.name.to_lowercase().contains(&query))
+            .map(|(i, _)| i)
+            .collect()
+    }
 }
 
 /// Local view-model row, not a wire-format struct - combines

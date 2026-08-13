@@ -35,25 +35,53 @@ pub fn render_popup(app: &mut App, frame: &mut Frame) {
 }
 
 fn render_list(app: &mut App, frame: &mut Frame, area: Rect) {
-    let block = Block::bordered()
-        .title("Images")
-        .title_bottom(Line::from(vec![
-            Span::styled("[Esc]", theme::accent()),
-            Span::raw(" Cancel"),
-        ]));
+    let visible = app.images.visible_indices();
+    let title = if app.images.search.is_empty() {
+        "Images".to_string()
+    } else {
+        format!("Images ({}/{})", visible.len(), app.images.images.len())
+    };
+    let hint = Line::from(vec![
+        Span::styled("[/]", theme::accent()),
+        Span::raw(" Search   "),
+        Span::styled("[Esc]", theme::accent()),
+        Span::raw(" Cancel"),
+    ]);
+    let block = Block::bordered().title(title).title_bottom(hint);
+    let inner = block.inner(area);
+    frame.render_widget(block, area);
+
+    let [search_area, list_area] =
+        Layout::vertical([Constraint::Length(1), Constraint::Min(0)]).areas(inner);
+    render_search_line(app, frame, search_area);
+
     // Image names are often a single unspaced token, so a plain char-chunk
     // wrap (not word-wrap) is what actually keeps a long name on-screen.
-    let wrap_width = block.inner(area).width.max(1) as usize;
-    let items: Vec<ListItem> = app
-        .images
-        .images
+    let wrap_width = list_area.width.max(1) as usize;
+    let items: Vec<ListItem> = visible
         .iter()
-        .map(|img| ListItem::new(wrap_text(&img.name, wrap_width)))
+        .map(|&i| ListItem::new(wrap_text(&app.images.images[i].name, wrap_width)))
         .collect();
-    let list = List::new(items)
-        .block(block)
-        .highlight_style(theme::accent().add_modifier(Modifier::REVERSED));
-    frame.render_stateful_widget(list, area, &mut app.images.list_state);
+    let list = List::new(items).highlight_style(theme::accent().add_modifier(Modifier::REVERSED));
+    frame.render_stateful_widget(list, list_area, &mut app.images.list_state);
+}
+
+fn render_search_line(app: &App, frame: &mut Frame, area: Rect) {
+    if app.images.searching {
+        let text = format!("/{}", app.images.search);
+        frame.render_widget(Paragraph::new(text).style(theme::accent()), area);
+        frame.set_cursor_position((area.x + 1 + app.images.search_cursor as u16, area.y));
+    } else if !app.images.search.is_empty() {
+        frame.render_widget(
+            Paragraph::new(format!("/{}", app.images.search)).style(theme::dim()),
+            area,
+        );
+    } else {
+        frame.render_widget(
+            Paragraph::new("Press / to search").style(theme::dim()),
+            area,
+        );
+    }
 }
 
 fn wrap_text(text: &str, width: usize) -> Vec<Line<'static>> {
@@ -69,11 +97,23 @@ fn render_details(app: &App, frame: &mut Frame, area: Rect) {
     let inner = block.inner(area);
     frame.render_widget(block, area);
 
-    let Some(i) = app.images.list_state.selected() else {
-        frame.render_widget(Paragraph::new("No image selected"), inner);
+    let visible = app.images.visible_indices();
+    let selected_real_idx = app
+        .images
+        .list_state
+        .selected()
+        .and_then(|pos| visible.get(pos).copied());
+
+    let Some(real_idx) = selected_real_idx else {
+        let text = if app.images.images.is_empty() {
+            "No image selected"
+        } else {
+            "No images match your search"
+        };
+        frame.render_widget(Paragraph::new(text), inner);
         return;
     };
-    let img = &app.images.images[i];
+    let img = &app.images.images[real_idx];
 
     let mut lines = if img.is_reservable() {
         vec![
