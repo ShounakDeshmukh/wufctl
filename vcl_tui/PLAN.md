@@ -97,12 +97,31 @@ pub enum RunState { Interactive, SuspendedForSsh }
 
 ### `App` struct (`app.rs`)
 
-Key fields: `screen: Screen`, `popup: Popup`, `run_state: RunState`,
-`client: Option<vcl_lib::VclClient>` (`None` until Setup succeeds), a
-single `tokio::runtime::Runtime` (see Event Loop below), `config: Config`,
-`images: Vec<Image>` + `ListState`, `reservations: Vec<Reservation>` +
-`ListState`, `last_res_poll: Instant`, `connect_cache: Option<(i64,
-ConnectData)>`, `my_ip: Option<String>`, `toast: Option<Toast>`.
+**Revised after starting implementation**: a fully flat `App` with every
+screen's fields on it directly gets unwieldy fast (~16+ fields, most
+meaningless outside their one screen). Split into global/shared fields
+plus one small named sub-struct per screen, instead of either a fully flat
+struct or a stricter `enum ScreenState` that only holds the current
+screen's data - the stricter enum doesn't fit here because the Connect
+screen needs simultaneous read access to the Reservations screen's list
+*and* selection (they're not mutually exclusive), so `reservations` can't
+be scoped inside a per-screen variant.
+
+Global/shared, flat on `App`: `screen: Screen`, `popup: Popup`,
+`run_state: RunState`, `exit: bool`, `client: Option<vcl_lib::VclClient>`
+(`None` until Setup succeeds), `rt: tokio::runtime::Runtime` (see Event
+Loop below - built via `Builder::new_current_thread().enable_all().build()`,
+NOT `Runtime::new()`, which builds a multi-threaded runtime and would only
+compile here by accident of `vcl_lib`'s own `tokio` feature flags being
+unified in transitively - `vcl_tui`'s own `Cargo.toml` should be
+self-sufficient), `config: Option<Config>`, `toast: Option<Toast>`.
+
+Per-screen, one sub-struct per screen as its own field on `App`:
+- `setup: SetupUiState { input: String, state: SetupState }`
+- `images: ImagesUiState { images: Vec<Image>, list_state: ListState }`
+- `reservations: ReservationsUiState { reservations: Vec<Reservation>, list_state: ListState, last_poll: Instant }`
+  (shared by both the Reservations and Connect screens)
+- `connect: ConnectUiState { cache: Option<(i64, ConnectData)>, my_ip: Option<String> }`
 
 ```rust
 /// Local view-model row. get_request_status alone never carries an image
@@ -454,6 +473,35 @@ toast rather than a panic.
    re-auth gate; only `Enter` with a valid token gets you back out). Not
    revisited here since it's a direct mockup-fidelity choice, not an
    oversight - flag to the user if this proves annoying in practice.
+
+## Colors/styling
+
+The mockup's own hex colors (in the original artifact) are illustrative
+only - the real app uses NC State's official brand palette instead
+(https://brand.ncsu.edu/designing-for-nc-state/color/), centralized in
+`vcl_tui/src/theme.rs` (constants + small `Style`-returning helper
+functions) and reused across every screen rather than hardcoded per file:
+
+- accent (selection highlight, borders, active tab, hint-key labels) =
+  **Bio-Indigo** `#4156A1`. **Revised after initial planning**: the first
+  pass reused **Wolfpack Red** `#CC0000` for both accent and danger,
+  reasoning NC State's palette had no separate color for the role - that
+  premise was wrong, the brand's expanded secondary palette does include
+  additional colors (Reynolds Red, Pyroman Flame, Carmichael Aqua,
+  Bio-Indigo). Painting every border/selection/hint-key in full-saturation
+  red read as constantly alarming in practice, so accent moved to
+  Bio-Indigo and red is now reserved solely for actual errors, where its
+  conventional "stop/danger" reading is earned.
+- danger/error = **Wolfpack Red** `#CC0000`.
+- success/ready = **Genomic Green** `#6F7D1C`.
+- pending/loading = **Hunt Yellow** `#FAC800`.
+- info/future/busy (e.g. "Validating...") = **Innovation Blue** `#427E93`.
+- dim/secondary text = *not* a gray `Color` value - NC State's palette has
+  no official neutral gray, so this uses the terminal's own dim/faint
+  rendering attribute (`Modifier::DIM`) on the default foreground instead
+  of picking an off-brand color.
+- Selected list row (once list screens exist) = reverse-video style
+  (accent background, dark text).
 
 ## New dependencies (`vcl_tui/Cargo.toml`)
 
