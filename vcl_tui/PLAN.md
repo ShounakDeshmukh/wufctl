@@ -493,32 +493,28 @@ toast rather than a panic.
 
 ## Colors/styling
 
-The mockup's own hex colors (in the original artifact) are illustrative
-only - the real app uses NC State's official brand palette instead
-(https://brand.ncsu.edu/designing-for-nc-state/color/), centralized in
-`vcl_tui/src/theme.rs` (constants + small `Style`-returning helper
-functions) and reused across every screen rather than hardcoded per file:
+**Revised twice.** First pass used NC State's official brand palette
+(hardcoded RGB hex, e.g. Wolfpack Red `#CC0000`) as a from-scratch design
+choice since the mockup's own hex colors were illustrative only. Second
+revision (this one) drops fixed RGB entirely in favor of the ANSI palette
+(`Color::Red`/`Green`/`Yellow`/`Blue`/`Cyan`) - the actual displayed RGB
+for each of these comes from whatever 16-color theme the user's terminal
+defines, so the app follows the host terminal's theme (light/dark,
+Solarized, Gruvbox, whatever) instead of a fixed brand look that could
+clash with it. Centralized in `vcl_tui/src/theme.rs` (constants + small
+`Style`-returning helper functions), reused across every screen:
 
 - accent (selection highlight, borders, active tab, hint-key labels) =
-  **Bio-Indigo** `#4156A1`. **Revised after initial planning**: the first
-  pass reused **Wolfpack Red** `#CC0000` for both accent and danger,
-  reasoning NC State's palette had no separate color for the role - that
-  premise was wrong, the brand's expanded secondary palette does include
-  additional colors (Reynolds Red, Pyroman Flame, Carmichael Aqua,
-  Bio-Indigo). Painting every border/selection/hint-key in full-saturation
-  red read as constantly alarming in practice, so accent moved to
-  Bio-Indigo and red is now reserved solely for actual errors, where its
-  conventional "stop/danger" reading is earned.
-- danger/error = **Wolfpack Red** `#CC0000`.
-- success/ready = **Genomic Green** `#6F7D1C`.
-- pending/loading = **Hunt Yellow** `#FAC800`.
-- info/future/busy (e.g. "Validating...") = **Innovation Blue** `#427E93`.
-- dim/secondary text = *not* a gray `Color` value - NC State's palette has
-  no official neutral gray, so this uses the terminal's own dim/faint
-  rendering attribute (`Modifier::DIM`) on the default foreground instead
-  of picking an off-brand color.
-- Selected list row (once list screens exist) = reverse-video style
-  (accent background, dark text).
+  `Color::Blue`.
+- danger/error = `Color::Red`.
+- success/ready = `Color::Green`.
+- pending/loading = `Color::Yellow`.
+- info/future/busy (e.g. "Validating...") = `Color::Cyan`.
+- dim/secondary text = the terminal's own dim/faint rendering attribute
+  (`Modifier::DIM`) on the default foreground, not a specific gray - this
+  was already theme-agnostic before the ANSI-palette revision and didn't
+  need to change.
+- Selected list row = reverse-video style (accent background, dark text).
 
 ## New dependencies (`vcl_tui/Cargo.toml`)
 
