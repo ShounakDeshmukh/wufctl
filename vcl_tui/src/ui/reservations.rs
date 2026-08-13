@@ -57,8 +57,14 @@ fn render_list(app: &mut App, frame: &mut Frame, area: Rect) {
             ]))
         })
         .collect();
+    let hint = Line::from(vec![
+        Span::styled("[n]", theme::accent()),
+        Span::raw(" New reservation   "),
+        Span::styled("[r]", theme::accent()),
+        Span::raw(" Refresh"),
+    ]);
     let list = List::new(items)
-        .block(Block::bordered().title("Reservations"))
+        .block(Block::bordered().title("Reservations").title_bottom(hint))
         .highlight_style(theme::accent().add_modifier(Modifier::REVERSED));
     frame.render_stateful_widget(list, area, &mut app.reservations.list_state);
 }
@@ -101,7 +107,13 @@ fn render_details(app: &App, frame: &mut Frame, area: Rect) {
                 Span::styled("End reservation", theme::dim()),
             ]));
         }
-        "loading" => lines.push(Line::styled("Provisioning image...", theme::dim())),
+        "loading" => {
+            lines.push(Line::styled("Provisioning image...", theme::dim()));
+            lines.push(Line::styled(
+                "This page updates automatically every 20s until it's ready.",
+                theme::dim(),
+            ));
+        }
         // RESPONSE_SHAPES.md only confirms loading/ready live - anything
         // else (expired/deleted/etc.) just shows its raw status here.
         other => lines.push(Line::styled(format!("Status: {other}"), theme::dim())),
@@ -115,17 +127,6 @@ fn render_details(app: &App, frame: &mut Frame, area: Rect) {
         lines.push(Line::from(""));
         lines.push(Line::styled(text, style));
     }
-
-    lines.push(Line::from(""));
-    lines.push(Line::from(vec![
-        Span::styled("[n]", theme::accent()),
-        Span::raw(" "),
-        Span::styled("New reservation", theme::dim()),
-        Span::raw("   "),
-        Span::styled("[r]", theme::accent()),
-        Span::raw(" "),
-        Span::styled("Refresh", theme::dim()),
-    ]));
 
     frame.render_widget(Paragraph::new(lines).wrap(Wrap { trim: false }), inner);
 }

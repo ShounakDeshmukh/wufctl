@@ -1,10 +1,10 @@
 use crate::config::Config;
 use crate::state::{
-    App, ImagesUiState, Reservation, ReservationsUiState, Screen, SetupState, SetupUiState,
+    App, ImagesUiState, Reservation, ReservationsUiState, Screen, SetupState, SetupUiState, Toast,
 };
 use crossterm::event::{self, Event, KeyCode, KeyEventKind, KeyModifiers};
 use ratatui::DefaultTerminal;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 const VCL_ENDPOINT: &str = "https://vcl.ncsu.edu/scheduling/index.php?mode=xmlrpccall";
 /// Matches the VCL web UI's own poll cadence; also the `r` refresh debounce.
 const RESERVATIONS_POLL_INTERVAL: Duration = Duration::from_secs(20);
@@ -12,6 +12,7 @@ const RESERVATIONS_POLL_INTERVAL: Duration = Duration::from_secs(20);
 /// loop wakes up periodically to check the reservations poll timer even
 /// with no keypress.
 const EVENT_POLL_RATE: Duration = Duration::from_millis(250);
+const TOAST_DURATION: Duration = Duration::from_secs(3);
 
 impl App {
     pub fn new() -> color_eyre::Result<Self> {
@@ -35,7 +36,15 @@ impl App {
             setup: SetupUiState::default(),
             images: ImagesUiState::default(),
             reservations: ReservationsUiState::default(),
+            toast: None,
         })
+    }
+
+    fn show_toast(&mut self, text: Result<String, String>) {
+        self.toast = Some(Toast {
+            text,
+            expires_at: Instant::now() + TOAST_DURATION,
+        });
     }
 
     pub fn run(&mut self, terminal: &mut DefaultTerminal) -> color_eyre::Result<()> {
@@ -211,7 +220,7 @@ impl App {
                     .last_poll
                     .expect("reservations_poll_due() being false implies last_poll is Some");
                 let remaining = RESERVATIONS_POLL_INTERVAL - last_poll.elapsed();
-                self.reservations.message = Some(Err(format!(
+                self.show_toast(Err(format!(
                     "Refreshed recently - try again in {}s.",
                     remaining.as_secs() + 1
                 )));

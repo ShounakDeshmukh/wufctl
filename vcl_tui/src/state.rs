@@ -77,6 +77,14 @@ pub struct ReservationsUiState {
     pub message: Option<Result<String, String>>,
 }
 
+/// A transient, self-expiring notification shown in the bottom-right
+/// corner, for feedback that shouldn't linger in a details pane (e.g. the
+/// refresh debounce warning).
+pub struct Toast {
+    pub text: Result<String, String>,
+    pub expires_at: std::time::Instant,
+}
+
 pub struct App {
     pub screen: Screen,
     pub config: Option<Config>,
@@ -86,4 +94,5 @@ pub struct App {
     pub setup: SetupUiState,
     pub images: ImagesUiState,
     pub reservations: ReservationsUiState,
+    pub toast: Option<Toast>,
 }

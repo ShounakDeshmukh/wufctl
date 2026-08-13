@@ -14,12 +14,45 @@ use crate::state::{App, Screen};
 use crate::theme;
 
 pub fn draw(app: &mut App, frame: &mut Frame) {
+    if app
+        .toast
+        .as_ref()
+        .is_some_and(|t| std::time::Instant::now() >= t.expires_at)
+    {
+        app.toast = None;
+    }
+
     match app.screen {
         Screen::Setup => setup::render(app, frame),
         Screen::Images => images::render(app, frame),
         Screen::Reservations => reservations::render(app, frame),
         _ => frame.render_widget(Paragraph::new("not yet implemented"), frame.area()),
     }
+
+    render_toast(app, frame);
+}
+
+/// Bottom-right, drawn last so it overlays whatever's underneath - matches
+/// the approved mockup's own toast (`"> " + msg`), just terminal-side.
+fn render_toast(app: &App, frame: &mut Frame) {
+    let Some(toast) = &app.toast else { return };
+    let (text, style) = match &toast.text {
+        Ok(t) => (t.as_str(), theme::success()),
+        Err(t) => (t.as_str(), theme::danger()),
+    };
+    let text = format!("> {text}");
+    let area = frame.area();
+    let width = (text.chars().count() as u16).min(area.width);
+    let toast_area = Rect {
+        x: area.width - width,
+        y: area.height.saturating_sub(1),
+        width,
+        height: 1,
+    };
+    frame.render_widget(
+        Paragraph::new(text).style(style.add_modifier(Modifier::BOLD)),
+        toast_area,
+    );
 }
 
 /// Shared top bar for every screen (2 rows: text + a rule underneath).
