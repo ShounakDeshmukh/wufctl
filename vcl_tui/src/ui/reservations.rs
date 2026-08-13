@@ -121,6 +121,10 @@ fn render_details(app: &App, frame: &mut Frame, area: Rect) {
         Span::styled("[n]", theme::accent()),
         Span::raw(" "),
         Span::styled("New reservation", theme::dim()),
+        Span::raw("   "),
+        Span::styled("[r]", theme::accent()),
+        Span::raw(" "),
+        Span::styled("Refresh", theme::dim()),
     ]));
 
     frame.render_widget(Paragraph::new(lines).wrap(Wrap { trim: false }), inner);

@@ -4,7 +4,14 @@ use crate::state::{
 };
 use crossterm::event::{self, Event, KeyCode, KeyEventKind, KeyModifiers};
 use ratatui::DefaultTerminal;
+use std::time::Duration;
 const VCL_ENDPOINT: &str = "https://vcl.ncsu.edu/scheduling/index.php?mode=xmlrpccall";
+/// Matches the VCL web UI's own poll cadence; also the `r` refresh debounce.
+const RESERVATIONS_POLL_INTERVAL: Duration = Duration::from_secs(20);
+/// How long `handle_events` waits for input before returning, so `run()`'s
+/// loop wakes up periodically to check the reservations poll timer even
+/// with no keypress.
+const EVENT_POLL_RATE: Duration = Duration::from_millis(250);
 
 impl App {
     pub fn new() -> color_eyre::Result<Self> {
@@ -36,7 +43,7 @@ impl App {
             if self.screen == Screen::Images && !self.images.loaded {
                 self.load_images()?;
             }
-            if self.screen == Screen::Reservations && !self.reservations.loaded {
+            if self.screen == Screen::Reservations && self.reservations_poll_due() {
                 self.load_reservations()?;
             }
             terminal.draw(|f| crate::ui::draw(self, f))?;
@@ -65,9 +72,18 @@ impl App {
         Ok(())
     }
 
+    /// `true` on first load, or once `RESERVATIONS_POLL_INTERVAL` has
+    /// passed since the last one - shared by the auto-poll and `r`.
+    fn reservations_poll_due(&self) -> bool {
+        self.reservations
+            .last_poll
+            .is_none_or(|t| t.elapsed() >= RESERVATIONS_POLL_INTERVAL)
+    }
+
     /// Fetches the list (id + image name, both confirmed live in
     /// `get_request_ids()`'s response) then one status per id.
     fn load_reservations(&mut self) -> color_eyre::Result<()> {
+        self.reservations.last_poll = Some(std::time::Instant::now());
         let Some(client) = &self.client else {
             return Ok(());
         };
@@ -78,7 +94,6 @@ impl App {
             Ok(entries) => entries,
             Err(err) => {
                 self.reservations.error = Some(format!("{err:#}"));
-                self.reservations.loaded = true;
                 return Ok(());
             }
         };
@@ -92,7 +107,6 @@ impl App {
                 Ok(status) => status,
                 Err(err) => {
                     self.reservations.error = Some(format!("{err:#}"));
-                    self.reservations.loaded = true;
                     return Ok(());
                 }
             };
@@ -103,20 +117,28 @@ impl App {
             });
         }
 
+        // Preserve the current selection across a refresh instead of
+        // jumping back to the top every 20s.
+        let selected = self.reservations.list_state.selected().unwrap_or(0);
         self.reservations
             .list_state
             .select(if reservations.is_empty() {
                 None
             } else {
-                Some(0)
+                Some(selected.min(reservations.len() - 1))
             });
         self.reservations.reservations = reservations;
         self.reservations.error = None;
-        self.reservations.loaded = true;
         Ok(())
     }
 
+    /// Times out after `EVENT_POLL_RATE` rather than blocking forever, so
+    /// `run()`'s loop wakes up periodically to check the reservations poll
+    /// timer even while the user isn't pressing anything.
     pub fn handle_events(&mut self, terminal: &mut DefaultTerminal) -> color_eyre::Result<()> {
+        if !event::poll(EVENT_POLL_RATE)? {
+            return Ok(());
+        }
         match event::read()? {
             // crossterm also emits key release/repeat events on Windows.
             Event::Key(key_event) if key_event.kind == KeyEventKind::Press => {
@@ -154,17 +176,37 @@ impl App {
         match self.screen {
             Screen::Setup => self.handle_setup_key(key_event, terminal)?,
             Screen::Images => self.handle_images_key(key_event),
-            Screen::Reservations => self.handle_reservations_key(key_event),
+            Screen::Reservations => self.handle_reservations_key(key_event)?,
             _ => {}
         }
 
         Ok(())
     }
 
-    fn handle_reservations_key(&mut self, key_event: crossterm::event::KeyEvent) {
+    fn handle_reservations_key(
+        &mut self,
+        key_event: crossterm::event::KeyEvent,
+    ) -> color_eyre::Result<()> {
+        if key_event.code == KeyCode::Char('r') {
+            if self.reservations_poll_due() {
+                self.load_reservations()?;
+            } else {
+                let last_poll = self
+                    .reservations
+                    .last_poll
+                    .expect("reservations_poll_due() being false implies last_poll is Some");
+                let remaining = RESERVATIONS_POLL_INTERVAL - last_poll.elapsed();
+                self.reservations.message = Some(Err(format!(
+                    "Refreshed recently - try again in {}s.",
+                    remaining.as_secs() + 1
+                )));
+            }
+            return Ok(());
+        }
+
         let len = self.reservations.reservations.len();
         if len == 0 {
-            return;
+            return Ok(());
         }
         let i = self.reservations.list_state.selected().unwrap_or(0);
         let status = self.reservations.reservations[i].status.status.clone();
@@ -185,6 +227,7 @@ impl App {
             KeyCode::Char('e') if status == "ready" => todo!("extend_request - not built yet"),
             _ => {}
         }
+        Ok(())
     }
 
     fn end_reservation(&mut self, i: usize) {

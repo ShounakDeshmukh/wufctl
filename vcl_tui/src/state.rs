@@ -70,9 +70,9 @@ pub struct ReservationsUiState {
     pub list_state: ratatui::widgets::ListState,
     /// No toast system yet - shown inline in place of the list.
     pub error: Option<String>,
-    /// Set once a load has been attempted, success or failure, so `run()`
-    /// doesn't refetch every tick on a genuinely empty list.
-    pub loaded: bool,
+    /// `None` until the first load; also gates the 20s auto-refresh and the
+    /// `r` manual-refresh debounce, so both share one cooldown clock.
+    pub last_poll: Option<std::time::Instant>,
     /// Inline feedback for the last `x`/create-reservation action.
     pub message: Option<Result<String, String>>,
 }
