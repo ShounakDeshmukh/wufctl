@@ -3,7 +3,7 @@ use ratatui::{
     layout::{Constraint, Layout},
     style::Style,
     text::{Line, Span, Text},
-    widgets::{Block, Paragraph},
+    widgets::Paragraph,
 };
 
 use crate::state::{App, SetupState};
@@ -16,7 +16,7 @@ pub fn render(app: &App, frame: &mut Frame) {
     super::render_top_bar(app, frame, top_bar_area);
 
     let card_area = super::centered_rect(60, 16, pane_area);
-    let block = Block::bordered().title("Setup");
+    let block = theme::block().title("Setup");
     let inner = block.inner(card_area);
     frame.render_widget(block, card_area);
 
@@ -93,7 +93,7 @@ fn render_input(app: &App, frame: &mut Frame, area: ratatui::layout::Rect) {
     } else {
         app.setup.input.clone()
     };
-    let input_block = Block::bordered().border_style(theme::accent());
+    let input_block = theme::block().border_style(theme::accent());
     let content_area = input_block.inner(area);
     frame.render_widget(input_block, area);
 

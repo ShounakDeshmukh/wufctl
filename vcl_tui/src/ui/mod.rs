@@ -44,7 +44,7 @@ pub fn draw(app: &mut App, frame: &mut Frame) {
 fn render_new_reservation_placeholder(app: &App, frame: &mut Frame, image_idx: usize) {
     let area = centered_rect(40, 9, frame.area());
     frame.render_widget(Clear, area);
-    let block = Block::bordered().title("New Reservation");
+    let block = theme::block().title("New Reservation");
     let inner = block.inner(area);
     frame.render_widget(block, area);
 
@@ -89,7 +89,7 @@ fn render_toast(app: &App, frame: &mut Frame) {
     };
 
     frame.render_widget(Clear, toast_area);
-    let block = Block::bordered().border_style(style);
+    let block = theme::block().border_style(style);
     let inner = block.inner(toast_area);
     frame.render_widget(block, toast_area);
     frame.render_widget(

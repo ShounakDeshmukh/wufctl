@@ -3,7 +3,7 @@ use ratatui::{
     layout::{Constraint, Layout, Rect},
     style::{Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, List, ListItem, Paragraph, Wrap},
+    widgets::{List, ListItem, Paragraph, Wrap},
 };
 
 use crate::state::App;
@@ -19,7 +19,7 @@ pub fn render(app: &mut App, frame: &mut Frame) {
         frame.render_widget(
             Paragraph::new(err.as_str())
                 .style(theme::danger())
-                .block(Block::bordered().title("Reservations")),
+                .block(theme::block().title("Reservations")),
             pane_area,
         );
         return;
@@ -64,13 +64,13 @@ fn render_list(app: &mut App, frame: &mut Frame, area: Rect) {
         Span::raw(" Refresh"),
     ]);
     let list = List::new(items)
-        .block(Block::bordered().title("Reservations").title_bottom(hint))
+        .block(theme::block().title("Reservations").title_bottom(hint))
         .highlight_style(theme::accent().add_modifier(Modifier::REVERSED));
     frame.render_stateful_widget(list, area, &mut app.reservations.list_state);
 }
 
 fn render_details(app: &App, frame: &mut Frame, area: Rect) {
-    let block = Block::bordered().title("Details");
+    let block = theme::block().title("Details");
     let inner = block.inner(area);
     frame.render_widget(block, area);
 

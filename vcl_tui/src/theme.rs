@@ -4,6 +4,7 @@
 //! of a hardcoded look.
 
 use ratatui::style::{Color, Modifier, Style};
+use ratatui::widgets::{Block, BorderType};
 
 /// Selection highlight, borders, hint keys, active tab.
 pub const ACCENT: Color = Color::Blue;
@@ -40,4 +41,11 @@ pub fn info() -> Style {
 /// attribute rather than a specific gray, so it works with any theme.
 pub fn dim() -> Style {
     Style::default().add_modifier(Modifier::DIM)
+}
+
+/// Every bordered panel (screens, popups, the toast) uses this instead of
+/// `Block::bordered()` directly, so the rounded-corner look is consistent
+/// and only defined in one place.
+pub fn block<'a>() -> Block<'a> {
+    Block::bordered().border_type(BorderType::Rounded)
 }

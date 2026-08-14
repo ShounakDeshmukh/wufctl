@@ -3,7 +3,7 @@ use ratatui::{
     layout::{Constraint, Layout, Rect},
     style::Modifier,
     text::{Line, Span},
-    widgets::{Block, Clear, List, ListItem, Paragraph, Wrap},
+    widgets::{Clear, List, ListItem, Paragraph, Wrap},
 };
 
 use crate::state::App;
@@ -21,7 +21,7 @@ pub fn render_popup(app: &mut App, frame: &mut Frame) {
         frame.render_widget(
             Paragraph::new(err.as_str())
                 .style(theme::danger())
-                .block(Block::bordered().title("Images")),
+                .block(theme::block().title("Images")),
             area,
         );
         return;
@@ -47,7 +47,7 @@ fn render_list(app: &mut App, frame: &mut Frame, area: Rect) {
         Span::styled("[Esc]", theme::accent()),
         Span::raw(" Cancel"),
     ]);
-    let block = Block::bordered().title(title).title_bottom(hint);
+    let block = theme::block().title(title).title_bottom(hint);
     let inner = block.inner(area);
     frame.render_widget(block, area);
 
@@ -93,7 +93,7 @@ fn wrap_text(text: &str, width: usize) -> Vec<Line<'static>> {
 }
 
 fn render_details(app: &App, frame: &mut Frame, area: Rect) {
-    let block = Block::bordered().title("Details");
+    let block = theme::block().title("Details");
     let inner = block.inner(area);
     frame.render_widget(block, area);
 
