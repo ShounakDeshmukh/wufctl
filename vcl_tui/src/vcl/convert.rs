@@ -77,6 +77,8 @@ impl TryFrom<&Value> for RequestListEntry {
         Ok(RequestListEntry {
             requestid: coerce_i64(field(v, "requestid")?, "requestid")?,
             imagename: field_str(v, "imagename")?,
+            start: coerce_i64(field(v, "start")?, "start")?,
+            end: coerce_i64(field(v, "end")?, "end")?,
         })
     }
 }
@@ -238,5 +240,7 @@ mod tests {
             entry.imagename,
             "Ubuntu 22 GPU with Cuda (GeForce RTX 2080 Ti)"
         );
+        assert_eq!(entry.start, 1786662000);
+        assert_eq!(entry.end, 1786684500);
     }
 }

@@ -223,6 +223,8 @@ impl App {
                         id: entry.requestid,
                         image_name: entry.imagename,
                         status,
+                        start: entry.start,
+                        end: entry.end,
                     });
                 }
                 Ok(reservations)

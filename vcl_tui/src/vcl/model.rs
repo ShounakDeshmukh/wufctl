@@ -35,8 +35,14 @@ pub enum ActionResult {
 /// One `requests[]` element from `get_request_ids()` - confirmed live to
 /// be a full struct, not a bare id. `requestid` (not `id`) is the field
 /// name here, a different key than `get_request_status`'s response.
+/// `start`/`end` are Unix timestamps - there's no separate "requested at"
+/// field anywhere in the API; for this app `start` doubles as that (every
+/// reservation here is either `"now"` or a scheduled future start, never
+/// something distinct from when it was requested).
 #[derive(Debug, Clone)]
 pub struct RequestListEntry {
     pub requestid: i64,
     pub imagename: String,
+    pub start: i64,
+    pub end: i64,
 }

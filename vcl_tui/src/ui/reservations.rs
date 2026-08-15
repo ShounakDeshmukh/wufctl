@@ -114,6 +114,11 @@ fn render_details(app: &mut App, frame: &mut Frame, area: Rect) {
             Span::raw("Status: "),
             Span::styled(&r.status.status, status_style(&r.status.status)),
         ]),
+        Line::from(format!(
+            "Starting: {}",
+            crate::utils::format_timestamp(r.start)
+        )),
+        Line::from(format!("Ending: {}", crate::utils::format_timestamp(r.end))),
     ];
 
     lines.push(Line::from(""));

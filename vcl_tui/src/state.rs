@@ -97,14 +97,18 @@ impl ImagesUiState {
 }
 
 /// Local view-model row, not a wire-format struct - combines
-/// `get_request_ids()`'s list-level fields (id + image name) with the
-/// finer-grained loading/ready state from a separate per-id
-/// `get_request_status()` call.
+/// `get_request_ids()`'s list-level fields (id + image name + start/end)
+/// with the finer-grained loading/ready state from a separate per-id
+/// `get_request_status()` call. `start` doubles as "requested at" for
+/// display - the API has no separate field for that, and for this app
+/// they're always the same instant anyway (immediate or scheduled start).
 #[derive(Debug, Clone)]
 pub struct Reservation {
     pub id: i64,
     pub image_name: String,
     pub status: crate::vcl::RequestStatus,
+    pub start: i64,
+    pub end: i64,
 }
 
 #[derive(Debug, Default)]
