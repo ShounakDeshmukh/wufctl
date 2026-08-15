@@ -397,10 +397,7 @@ impl App {
                     });
                 Ok(format!("Reservation #{id} ended."))
             }
-            Ok(crate::vcl::ActionResult::Error {
-                errorcode,
-                errormsg,
-            }) => Err(format!("[{errorcode}] {errormsg}")),
+            Ok(crate::vcl::ActionResult::Error { errormsg, .. }) => Err(errormsg),
             Err(err) => Err(format!("{err:#}")),
         });
     }
@@ -680,11 +677,8 @@ impl App {
                 };
                 self.show_toast(Ok(message));
             }
-            Ok(crate::vcl::ActionResult::Error {
-                errorcode,
-                errormsg,
-            }) => {
-                self.new_reservation.message = Some(format!("[{errorcode}] {errormsg}"));
+            Ok(crate::vcl::ActionResult::Error { errormsg, .. }) => {
+                self.new_reservation.message = Some(errormsg);
             }
             Err(err) => {
                 self.new_reservation.message = Some(describe_add_request_error(&err));
