@@ -9,15 +9,11 @@ use ratatui::DefaultTerminal;
 use std::sync::{Arc, mpsc};
 use std::time::{Duration, Instant};
 const VCL_ENDPOINT: &str = "https://vcl.ncsu.edu/scheduling/index.php?mode=xmlrpccall";
-/// Matches the VCL web UI's own poll cadence; also the `r` refresh debounce.
 const RESERVATIONS_POLL_INTERVAL: Duration = Duration::from_secs(20);
-/// How long `handle_events` waits for input before returning, so `run()`'s
-/// loop wakes up periodically to check the reservations poll timer even
-/// with no keypress.
+/// So `run()`'s loop keeps checking the poll timer even without a keypress.
 const EVENT_POLL_RATE: Duration = Duration::from_millis(250);
 const TOAST_DURATION: Duration = Duration::from_secs(3);
-/// Session-scoped image-list cache - reopening the picker reuses it rather
-/// than refetching every time, unless it's older than this.
+/// Session-scoped image cache, so reopening the picker doesn't refetch every time.
 const IMAGES_CACHE_INTERVAL: Duration = Duration::from_secs(600);
 
 impl App {
@@ -64,8 +60,7 @@ impl App {
     pub fn run(&mut self, terminal: &mut DefaultTerminal) -> color_eyre::Result<()> {
         while !self.exit {
             self.poll_pending();
-            // Only ever one background call in flight app-wide - don't
-            // start another while one's still running.
+            // Only one background call in flight at a time.
             if self.pending.is_none() {
                 if self.popup == Popup::ImagePicker && self.images_cache_stale() {
                     self.trigger_load_images();
@@ -79,9 +74,7 @@ impl App {
         }
         Ok(())
     }
-
-    /// Checks the in-flight background call (if any) without blocking;
-    /// applies its result and clears `pending` once it lands.
+    /// Checks the in-flight background call, if any, without blocking.
     fn poll_pending(&mut self) {
         let Some(op) = self.pending.take() else {
             return;
@@ -145,8 +138,7 @@ impl App {
         }
     }
 
-    /// `true` on first open, or once `IMAGES_CACHE_INTERVAL` has passed
-    /// since the last successful load.
+    /// True on first open or once the cache interval has passed.
     fn images_cache_stale(&self) -> bool {
         self.images
             .last_loaded
@@ -180,17 +172,14 @@ impl App {
         self.images.last_loaded = Some(Instant::now());
     }
 
-    /// `true` on first load, or once `RESERVATIONS_POLL_INTERVAL` has
-    /// passed since the last one - the `r` refresh debounce.
+    /// True on first load, or once the poll interval has passed (the `r` debounce).
     fn reservations_poll_due(&self) -> bool {
         self.reservations
             .last_poll
             .is_none_or(|t| t.elapsed() >= RESERVATIONS_POLL_INTERVAL)
     }
 
-    /// Auto-poll only runs the initial load plus, while something is still
-    /// `loading`, one refresh per `RESERVATIONS_POLL_INTERVAL` - once
-    /// everything has settled it stops, and only `r` refreshes from there.
+    /// Auto-polls while something's still loading, then stops once everything settles.
     fn should_auto_poll_reservations(&self) -> bool {
         if self.reservations.last_poll.is_none() {
             return true;
@@ -203,9 +192,7 @@ impl App {
                 .any(|r| r.status.status == "loading")
     }
 
-    /// Fetches the list (id + image name, both confirmed live in
-    /// `get_request_ids()`'s response) then one status per id, all inside
-    /// the background thread's single `block_on` call.
+    /// Fetches the list, then one status per id, inside a single `block_on` call.
     fn trigger_load_reservations(&mut self) {
         self.reservations.last_poll = Some(Instant::now());
         let Some(client) = self.client.clone() else {
@@ -237,8 +224,7 @@ impl App {
     fn apply_load_reservations(&mut self, result: color_eyre::Result<Vec<Reservation>>) {
         match result {
             Ok(reservations) => {
-                // Preserve the current selection across a refresh instead
-                // of jumping back to the top every 20s.
+                // Preserve the selection across a refresh instead of jumping to the top.
                 let selected = self.reservations.list_state.selected().unwrap_or(0);
                 self.reservations
                     .list_state
@@ -254,10 +240,7 @@ impl App {
         }
     }
 
-    /// Times out after `EVENT_POLL_RATE` rather than blocking forever, so
-    /// `run()`'s loop wakes up periodically to check the reservations poll
-    /// timer and the pending background call even while the user isn't
-    /// pressing anything.
+    /// Times out instead of blocking forever, so `run()`'s loop keeps checking timers.
     pub fn handle_events(&mut self) -> color_eyre::Result<()> {
         if !event::poll(EVENT_POLL_RATE)? {
             return Ok(());
@@ -295,8 +278,7 @@ impl App {
             return Ok(());
         }
 
-        // A popup swallows all keys - it takes priority over the screen
-        // underneath, which keeps rendering but shouldn't react to input.
+        // A popup swallows all keys, taking priority over the screen underneath.
         match self.popup {
             Popup::None => {}
             Popup::ImagePicker => return self.handle_image_picker_key(key_event),
@@ -337,8 +319,7 @@ impl App {
 
         if key_event.code == KeyCode::Char('n') {
             self.popup = Popup::ImagePicker;
-            // Drop any stale search each time; the image list itself is
-            // cached (see `images_cache_stale`), not force-refetched.
+            // Drop any stale search; the image list itself stays cached.
             self.images.search.clear();
             self.images.search_cursor = 0;
             self.images.searching = false;
@@ -366,8 +347,7 @@ impl App {
             }
             KeyCode::Char('x') if status == "ready" => {
                 if self.pending.is_some() {
-                    // e.g. an auto-poll refresh is mid-flight - don't
-                    // stomp it by starting a second background op.
+                    // Don't stomp an in-flight call (e.g. an auto-poll refresh) with a second one.
                     self.show_toast(Err("Still working - hang on...".to_string()));
                 } else {
                     self.trigger_end_reservation(i);
@@ -427,9 +407,7 @@ impl App {
         id: i64,
     ) -> color_eyre::Result<()> {
         if key_event.code == KeyCode::Esc {
-            // Only ExtendRequest could be pending while this popup is
-            // open - block navigating away mid-submit, same reasoning as
-            // the New Reservation form's Esc guard.
+            // Block navigating away mid-submit, same as the New Reservation form's Esc guard.
             if self.pending.is_some() {
                 self.show_toast(Err("Still working - hang on...".to_string()));
                 return Ok(());
@@ -486,8 +464,7 @@ impl App {
             Ok(crate::vcl::ActionResult::Success { .. }) => {
                 self.popup = Popup::None;
                 self.extend = ExtendFormState::default();
-                // Server is the source of truth - force a fresh fetch,
-                // same reasoning as a successful add_request.
+                // Server is the source of truth, so force a fresh fetch.
                 self.reservations.last_poll = None;
                 self.show_toast(Ok(format!("Reservation #{id} extended.")));
             }
@@ -560,8 +537,7 @@ impl App {
         Ok(())
     }
 
-    /// Vim/less-style `/` search: keys edit the query until `Enter`
-    /// (confirm, keep the filter) or `Esc` (cancel, clear the filter).
+    /// Vim/less-style `/` search: `Enter` keeps the filter, `Esc` clears it.
     fn handle_image_search_key(
         &mut self,
         key_event: crossterm::event::KeyEvent,
@@ -619,15 +595,12 @@ impl App {
         image_idx: usize,
     ) -> color_eyre::Result<()> {
         if key_event.code == KeyCode::Esc {
-            // While AddRequest is pending, this popup is the only thing
-            // that could be in flight - block navigating away, since
-            // apply_add_request unconditionally closes the popup on
-            // success and would otherwise stomp wherever Esc had gone.
+            // Block navigating away while AddRequest is pending, or success would stomp it.
             if self.pending.is_some() {
                 self.show_toast(Err("Still working - hang on...".to_string()));
                 return Ok(());
             }
-            // Back one step, to the picker - not all the way to Reservations.
+            // Back one step, to the picker, not all the way to Reservations.
             self.popup = Popup::ImagePicker;
             self.new_reservation = NewReservationFormState::default();
             return Ok(());
@@ -673,8 +646,7 @@ impl App {
         Ok(())
     }
 
-    /// `Left`/`Right` on the focused row: cycles that row's value, except
-    /// on `CustomMinutes` where it moves the text cursor instead.
+    /// `Left`/`Right` cycles the focused row's value, except `CustomMinutes` moves the cursor.
     fn adjust_new_reservation_field(&mut self, forward: bool) {
         use crate::state::{AmPm, StartChoice};
         let f = &mut self.new_reservation;
@@ -769,9 +741,7 @@ impl App {
             Ok(crate::vcl::ActionResult::Success { requestid }) => {
                 self.popup = Popup::None;
                 self.new_reservation = NewReservationFormState::default();
-                // Server is the source of truth - force a fresh fetch
-                // (rather than inserting a locally-guessed row) next
-                // time `run()`'s loop checks the poll timer.
+                // Server is the source of truth, so force a fresh fetch next poll.
                 self.reservations.last_poll = None;
                 let message = match requestid {
                     Some(id) => format!("Reservation #{id} created."),
@@ -822,9 +792,7 @@ impl App {
             return Ok(());
         }
 
-        // Most Linux terminals only bind Ctrl+Shift+V, not Ctrl+V, so read
-        // the clipboard directly as a fallback; no clipboard (e.g. headless
-        // SSH) just no-ops.
+        // Most Linux terminals only bind Ctrl+Shift+V, so fall back to reading the clipboard directly.
         if key_event.modifiers.contains(KeyModifiers::CONTROL)
             && key_event.code == KeyCode::Char('v')
         {
@@ -900,11 +868,7 @@ impl App {
     }
 }
 
-/// The server drops the connection outright - no XML-RPC fault, no HTTP
-/// error status - when it rejects certain requests outright; confirmed
-/// live for `add_request` with an out-of-range custom duration. There's no
-/// structured reason in that case, so a raw connection-failure string is
-/// translated into an actionable guess (`hint`) rather than shown as-is.
+/// The server just drops the connection on some rejections, so turn that into an actionable guess.
 fn describe_rejected_connection(err: &color_eyre::eyre::Report, hint: &str) -> String {
     if let Some(vcl_lib::VclError::HttpError(_)) = err.downcast_ref::<vcl_lib::VclError>() {
         return format!("Server rejected the request - {hint}");

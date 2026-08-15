@@ -23,9 +23,7 @@ pub fn draw(app: &mut App, frame: &mut Frame) {
     {
         app.toast = None;
     }
-    // Only actually animates while a background call is in flight - the
-    // whole point is to advance one frame per draw, so it keeps spinning
-    // even though the call itself blocks a background thread, not this one.
+    // Advances one frame per draw, so it keeps spinning while the background call blocks.
     if app.pending.is_some() {
         app.throbber_state.calc_next();
     }
@@ -35,8 +33,7 @@ pub fn draw(app: &mut App, frame: &mut Frame) {
         Screen::Reservations => reservations::render(app, frame),
     }
 
-    // Popups are drawn on top of whatever screen is underneath, which
-    // keeps rendering (see `handle_key_event`'s input-swallowing note).
+    // Popups draw on top of whatever screen is underneath, which keeps rendering.
     match app.popup {
         Popup::None => {}
         Popup::ImagePicker => images::render_popup(app, frame),
@@ -49,10 +46,7 @@ pub fn draw(app: &mut App, frame: &mut Frame) {
     render_toast(app, frame);
 }
 
-/// One "> Label : < value >" row for a spinner-style form field - the
-/// `< >` bracket affordance signals `Left`/`Right` cycles it; unfocused
-/// rows drop the marker and brackets. Shared by the New Reservation and
-/// Extend popups.
+/// One "> Label : < value >" row for a spinner-style form field, shared by both popups.
 pub fn field_line(label: &str, focused: bool, value: String) -> Line<'static> {
     let marker = if focused { "> " } else { "  " };
     let value_text = if focused {
@@ -71,10 +65,7 @@ pub fn field_line(label: &str, focused: bool, value: String) -> Line<'static> {
     ])
 }
 
-/// Centered throbber + label within `area` - each screen calls this inside
-/// whichever panel is actually waiting on the content that would fill it
-/// (e.g. the list box on first load), rather than a generic global corner
-/// indicator that doesn't say what's loading or where.
+/// Centered throbber + label, drawn inside whichever panel is waiting on content.
 pub fn render_throbber(app: &mut App, frame: &mut Frame, area: Rect, label: &'static str) {
     let text_width = (label.chars().count() as u16 + 2).min(area.width);
     let row = Rect {
@@ -89,9 +80,7 @@ pub fn render_throbber(app: &mut App, frame: &mut Frame, area: Rect, label: &'st
     frame.render_stateful_widget(throbber, row, &mut app.throbber_state);
 }
 
-/// Bottom-right, drawn last so it overlays whatever's underneath - matches
-/// the approved mockup's own toast (`"> " + msg`), plus a border since it's
-/// a floating overlay rather than inline status-bar text like the mockup.
+/// Bottom-right, drawn last so it overlays whatever's underneath.
 fn render_toast(app: &App, frame: &mut Frame) {
     let Some(toast) = &app.toast else { return };
     let (message, style) = match &toast.text {
@@ -119,9 +108,6 @@ fn render_toast(app: &App, frame: &mut Frame) {
     );
 }
 
-/// Shared top bar for every screen (2 rows: text + a rule underneath).
-/// Right side is the signed-in indicator - no API call returns the user's
-/// own email, so this shows a status dot + "SIGNED IN", not an identity.
 pub fn render_top_bar(app: &App, frame: &mut Frame, area: Rect) {
     let block = Block::new()
         .borders(Borders::BOTTOM)
@@ -153,7 +139,6 @@ pub fn render_top_bar(app: &App, frame: &mut Frame, area: Rect) {
     frame.render_widget(Paragraph::new(right), right_area);
 }
 
-/// Centers a `width` x `height` rect within `area`, clamped to its bounds.
 pub fn centered_rect(width: u16, height: u16, area: Rect) -> Rect {
     let width = width.min(area.width);
     let height = height.min(area.height);

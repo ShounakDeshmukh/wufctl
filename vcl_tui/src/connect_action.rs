@@ -3,9 +3,7 @@ use std::process::{Command, Stdio};
 pub const AVD_GUIDE_URL: &str =
     "https://vcl.ncsu.edu/accessing-environments-in-windows-virtual-desktop/";
 
-/// The launched app (e.g. a browser) inherits our stdio by default, and its
-/// own stderr chatter (GTK theme warnings, etc.) would otherwise corrupt
-/// the raw-mode terminal - so every branch redirects stdout/stderr to null.
+/// Opens a URL in the default browser, cross-platform. Does not wait for the browser to exit.
 pub fn open_url(url: &str) -> std::io::Result<()> {
     #[cfg(target_os = "linux")]
     {

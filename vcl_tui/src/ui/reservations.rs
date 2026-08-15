@@ -50,9 +50,7 @@ fn render_list(app: &mut App, frame: &mut Frame, area: Rect) {
     ]);
     let block = theme::block().title("Reservations").title_bottom(hint);
 
-    // First load: nothing to show yet, so the spinner replaces the (empty)
-    // list rather than sitting in a generic corner overlay. A refresh with
-    // existing content just updates quietly - see PLAN.md.
+    // First load or cache expired: spinner replaces the empty list.
     if app.reservations.reservations.is_empty()
         && matches!(app.pending, Some(PendingOp::LoadReservations(_)))
     {
@@ -88,10 +86,6 @@ fn render_details(app: &mut App, frame: &mut Frame, area: Rect) {
     let inner = block.inner(area);
     frame.render_widget(block, area);
 
-    // `load_reservations` only ever leaves the selection unset when the
-    // list itself is empty (non-empty always selects an index), so this
-    // branch is specifically "you have zero reservations", not "you have
-    // some but haven't picked one".
     let Some(i) = app.reservations.list_state.selected() else {
         frame.render_widget(
             Paragraph::new("You have no current reservations.").style(theme::dim()),
@@ -146,8 +140,7 @@ fn render_details(app: &mut App, frame: &mut Frame, area: Rect) {
                 theme::dim(),
             ));
         }
-        // RESPONSE_SHAPES.md only confirms loading/ready live - anything
-        // else (expired/deleted/etc.) just shows its raw status here.
+        // Any other status is unexpected, but show it anyway.
         other => lines.push(Line::styled(format!("Status: {other}"), theme::dim())),
     }
 

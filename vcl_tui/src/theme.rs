@@ -1,20 +1,11 @@
-//! Terminal-native colors, mapped onto the app's semantic roles. Uses the
-//! ANSI palette (`Color::Red`/`Green`/etc.) rather than fixed RGB values,
-//! so the app follows whatever theme the user's terminal defines instead
-//! of a hardcoded look.
-
+//! Uses the ANSI palette
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::widgets::{Block, BorderType};
 
-/// Selection highlight, borders, hint keys, active tab.
 pub const ACCENT: Color = Color::Blue;
-/// Validation/error text.
 pub const DANGER: Color = Color::Red;
-/// "ready" status.
 pub const SUCCESS: Color = Color::Green;
-/// "loading"/"pending" status.
 pub const PENDING: Color = Color::Yellow;
-/// Busy/in-progress state (e.g. "Validating...") and "future" status.
 pub const INFO: Color = Color::Cyan;
 
 pub fn accent() -> Style {
@@ -37,15 +28,12 @@ pub fn info() -> Style {
     Style::default().fg(INFO)
 }
 
-/// De-emphasized secondary text - the terminal's own dim/faint rendering
-/// attribute rather than a specific gray, so it works with any theme.
+/// Terminal DIM
 pub fn dim() -> Style {
     Style::default().add_modifier(Modifier::DIM)
 }
 
-/// Every bordered panel (screens, popups, the toast) uses this instead of
-/// `Block::bordered()` directly, so the rounded-corner look is consistent
-/// and only defined in one place.
+/// All panels use the same rounded border style
 pub fn block<'a>() -> Block<'a> {
     Block::bordered().border_type(BorderType::Rounded)
 }

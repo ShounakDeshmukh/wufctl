@@ -97,8 +97,7 @@ fn render_input(app: &App, frame: &mut Frame, area: ratatui::layout::Rect) {
     let content_area = input_block.inner(area);
     frame.render_widget(input_block, area);
 
-    // Scroll window follows the cursor (not the string end) so it never
-    // overflows the border and Left/Right still works once scrolled.
+    // Scroll window follows the cursor, not the string end, so it never overflows the border.
     let width = content_area.width as usize;
     let total = display.chars().count();
     let cursor = app.setup.cursor.min(total);

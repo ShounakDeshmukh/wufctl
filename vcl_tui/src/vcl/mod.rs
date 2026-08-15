@@ -29,8 +29,7 @@ pub async fn get_request_status(client: &vcl_lib::VclClient, id: i64) -> Result<
     RequestStatus::try_from(&client.get_request_status(id).await?)
 }
 
-/// `start` is `"now"` or a Unix timestamp string - the New Reservation
-/// popup is responsible for producing either.
+/// `start` is `"now"` or a Unix timestamp.
 pub async fn add_request(
     client: &vcl_lib::VclClient,
     image_id: i64,

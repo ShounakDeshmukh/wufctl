@@ -3,8 +3,7 @@ use vcl_lib::Value;
 
 use super::model::{ActionResult, Image, RequestListEntry, RequestStatus};
 
-/// Accepts `Value::Int` or a parseable `Value::String` - the server's
-/// inconsistent numeric typing (see RESPONSE_SHAPES.md).
+/// Coerces a `Value` into an `i64`, accepting either a JSON number or a string that parses as an integer
 pub fn coerce_i64(v: &Value, field: &'static str) -> Result<i64> {
     v.as_i64()
         .or_else(|| v.as_str().and_then(|s| s.trim().parse().ok()))
@@ -209,9 +208,7 @@ mod tests {
 
     #[test]
     fn request_list_entry_from_live_shape() {
-        // Fixture captured live via get_request_ids() - each `requests[]`
-        // element is a full struct (id key is `requestid`, not `id`), not
-        // the bare scalar this code originally assumed.
+        // Fixture captured live - each `requests[]` element is a full struct, not a bare scalar.
         let mut map = HashMap::new();
         map.insert("isserver".to_string(), Value::Int(0));
         map.insert("serverowner".to_string(), Value::Int(1));

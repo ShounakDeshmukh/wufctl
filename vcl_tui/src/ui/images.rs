@@ -9,9 +9,7 @@ use ratatui::{
 use crate::state::{App, PendingOp};
 use crate::theme;
 
-/// Big popup over Reservations (`Clear` + a centered rect at ~80% of the
-/// terminal), not a full-screen render - Images isn't a standalone tab
-/// anymore, only reachable via `n` from Reservations.
+/// Big popup over Reservations, only reachable via `n`, not a standalone screen.
 pub fn render_popup(app: &mut App, frame: &mut Frame) {
     let full = frame.area();
     let area = super::centered_rect(full.width * 4 / 5, full.height * 4 / 5, full);
@@ -42,8 +40,7 @@ fn render_list(app: &mut App, frame: &mut Frame, area: Rect) {
         Span::raw(" Cancel"),
     ]);
 
-    // First load (or cache expired): nothing to show yet, so the spinner
-    // replaces the empty list rather than a generic corner overlay.
+    // First load or cache expired: spinner replaces the empty list.
     if app.images.images.is_empty() && matches!(app.pending, Some(PendingOp::LoadImages(_))) {
         let block = theme::block().title("Images").title_bottom(hint);
         let inner = block.inner(area);
@@ -66,8 +63,7 @@ fn render_list(app: &mut App, frame: &mut Frame, area: Rect) {
         Layout::vertical([Constraint::Length(1), Constraint::Min(0)]).areas(inner);
     render_search_line(app, frame, search_area);
 
-    // Image names are often a single unspaced token, so a plain char-chunk
-    // wrap (not word-wrap) is what actually keeps a long name on-screen.
+    // Unspaced image names: use char-chunk wrapping.
     let wrap_width = list_area.width.max(1) as usize;
     let items: Vec<ListItem> = visible
         .iter()

@@ -47,8 +47,7 @@ impl Config {
         let config_path = dir.join("config.toml");
         let contents = toml::to_string(self).context("failed to serialize config")?;
 
-        // Create it with 0600 from the start to avoid a brief
-        // world-readable window. Unix-only; Windows has no equivalent.
+        // Create it with 0600 from the start to avoid a brief world-readable window.
         #[cfg(unix)]
         {
             use std::io::Write;

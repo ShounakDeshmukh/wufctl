@@ -138,9 +138,7 @@ pub fn render_popup(app: &mut App, frame: &mut Frame, image_idx: usize) {
     }
 }
 
-/// An actual calendar date reads far less ambiguously than a bare "+2"
-/// offset - e.g. "Sat Aug 17" rather than making the user do day-of-week
-/// math in their head from a plain day-count.
+/// Returns a string like "Mon Jan 1"
 fn day_label(offset: u8) -> String {
     let date = chrono::Local::now().date_naive() + chrono::Days::new(offset as u64);
     let formatted = date.format("%a %b %-d").to_string();
