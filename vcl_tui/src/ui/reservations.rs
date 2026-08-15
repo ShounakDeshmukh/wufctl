@@ -6,7 +6,7 @@ use ratatui::{
     widgets::{List, ListItem, Paragraph, Wrap},
 };
 
-use crate::state::App;
+use crate::state::{App, PendingOp};
 use crate::theme;
 
 pub fn render(app: &mut App, frame: &mut Frame) {
@@ -42,6 +42,26 @@ fn status_style(status: &str) -> Style {
 }
 
 fn render_list(app: &mut App, frame: &mut Frame, area: Rect) {
+    let hint = Line::from(vec![
+        Span::styled("[n]", theme::accent()),
+        Span::raw(" New reservation   "),
+        Span::styled("[r]", theme::accent()),
+        Span::raw(" Refresh"),
+    ]);
+    let block = theme::block().title("Reservations").title_bottom(hint);
+
+    // First load: nothing to show yet, so the spinner replaces the (empty)
+    // list rather than sitting in a generic corner overlay. A refresh with
+    // existing content just updates quietly - see PLAN.md.
+    if app.reservations.reservations.is_empty()
+        && matches!(app.pending, Some(PendingOp::LoadReservations(_)))
+    {
+        let inner = block.inner(area);
+        frame.render_widget(block, area);
+        super::render_throbber(app, frame, inner, "Loading reservations...");
+        return;
+    }
+
     let items: Vec<ListItem> = app
         .reservations
         .reservations
@@ -57,19 +77,13 @@ fn render_list(app: &mut App, frame: &mut Frame, area: Rect) {
             ]))
         })
         .collect();
-    let hint = Line::from(vec![
-        Span::styled("[n]", theme::accent()),
-        Span::raw(" New reservation   "),
-        Span::styled("[r]", theme::accent()),
-        Span::raw(" Refresh"),
-    ]);
     let list = List::new(items)
-        .block(theme::block().title("Reservations").title_bottom(hint))
+        .block(block)
         .highlight_style(theme::accent().add_modifier(Modifier::REVERSED));
     frame.render_stateful_widget(list, area, &mut app.reservations.list_state);
 }
 
-fn render_details(app: &App, frame: &mut Frame, area: Rect) {
+fn render_details(app: &mut App, frame: &mut Frame, area: Rect) {
     let block = theme::block().title("Details");
     let inner = block.inner(area);
     frame.render_widget(block, area);
@@ -85,6 +99,12 @@ fn render_details(app: &App, frame: &mut Frame, area: Rect) {
         );
         return;
     };
+
+    if matches!(app.pending, Some(PendingOp::EndReservation { .. })) {
+        super::render_throbber(app, frame, inner, "Ending reservation...");
+        return;
+    }
+
     let r = &app.reservations.reservations[i];
 
     let mut lines = vec![

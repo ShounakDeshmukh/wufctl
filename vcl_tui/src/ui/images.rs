@@ -6,7 +6,7 @@ use ratatui::{
     widgets::{Clear, List, ListItem, Paragraph, Wrap},
 };
 
-use crate::state::App;
+use crate::state::{App, PendingOp};
 use crate::theme;
 
 /// Big popup over Reservations (`Clear` + a centered rect at ~80% of the
@@ -35,18 +35,29 @@ pub fn render_popup(app: &mut App, frame: &mut Frame) {
 }
 
 fn render_list(app: &mut App, frame: &mut Frame, area: Rect) {
-    let visible = app.images.visible_indices();
-    let title = if app.images.search.is_empty() {
-        "Images".to_string()
-    } else {
-        format!("Images ({}/{})", visible.len(), app.images.images.len())
-    };
     let hint = Line::from(vec![
         Span::styled("[/]", theme::accent()),
         Span::raw(" Search   "),
         Span::styled("[Esc]", theme::accent()),
         Span::raw(" Cancel"),
     ]);
+
+    // First load (or cache expired): nothing to show yet, so the spinner
+    // replaces the empty list rather than a generic corner overlay.
+    if app.images.images.is_empty() && matches!(app.pending, Some(PendingOp::LoadImages(_))) {
+        let block = theme::block().title("Images").title_bottom(hint);
+        let inner = block.inner(area);
+        frame.render_widget(block, area);
+        super::render_throbber(app, frame, inner, "Loading images...");
+        return;
+    }
+
+    let visible = app.images.visible_indices();
+    let title = if app.images.search.is_empty() {
+        "Images".to_string()
+    } else {
+        format!("Images ({}/{})", visible.len(), app.images.images.len())
+    };
     let block = theme::block().title(title).title_bottom(hint);
     let inner = block.inner(area);
     frame.render_widget(block, area);

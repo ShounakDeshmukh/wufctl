@@ -9,7 +9,7 @@ use ratatui::{
 use crate::state::{App, SetupState};
 use crate::theme;
 
-pub fn render(app: &App, frame: &mut Frame) {
+pub fn render(app: &mut App, frame: &mut Frame) {
     let [top_bar_area, pane_area] =
         Layout::vertical([Constraint::Length(2), Constraint::Min(0)]).areas(frame.area());
 
@@ -111,10 +111,14 @@ fn render_input(app: &App, frame: &mut Frame, area: ratatui::layout::Rect) {
     frame.set_cursor_position((content_area.x + cursor_col as u16, content_area.y));
 }
 
-fn render_status(app: &App, frame: &mut Frame, area: ratatui::layout::Rect) {
+fn render_status(app: &mut App, frame: &mut Frame, area: ratatui::layout::Rect) {
+    if matches!(app.setup.state, SetupState::Validating) {
+        super::render_throbber(app, frame, area, "Signing in...");
+        return;
+    }
     let (text, style) = match &app.setup.state {
         SetupState::Idle => (String::new(), Style::default()),
-        SetupState::Validating => ("Validating token...".to_string(), theme::info()),
+        SetupState::Validating => unreachable!(),
         SetupState::Error(msg) => (msg.clone(), theme::danger()),
     };
     frame.render_widget(Paragraph::new(text).style(style), area);

@@ -5,15 +5,20 @@ use ratatui::{
     widgets::{Clear, Paragraph},
 };
 
-use crate::state::{AmPm, App, DURATION_PRESETS, FormRow, MINUTE_STEPS, StartChoice};
+use crate::state::{AmPm, App, DURATION_PRESETS, FormRow, MINUTE_STEPS, PendingOp, StartChoice};
 use crate::theme;
 
-pub fn render_popup(app: &App, frame: &mut Frame, image_idx: usize) {
+pub fn render_popup(app: &mut App, frame: &mut Frame, image_idx: usize) {
     let area = super::centered_rect(56, 20, frame.area());
     frame.render_widget(Clear, area);
     let block = theme::block().title("New Reservation");
     let inner = block.inner(area);
     frame.render_widget(block, area);
+
+    if matches!(app.pending, Some(PendingOp::AddRequest(_))) {
+        super::render_throbber(app, frame, inner, "Creating reservation...");
+        return;
+    }
 
     let f = &app.new_reservation;
     let image_name = app
@@ -40,11 +45,7 @@ pub fn render_popup(app: &App, frame: &mut Frame, image_idx: usize) {
         lines.push(field_line(
             "Day",
             f.focus == FormRow::Day,
-            if f.day_offset == 0 {
-                "Today".to_string()
-            } else {
-                format!("+{}", f.day_offset)
-            },
+            day_label(f.day_offset),
         ));
         lines.push(field_line(
             "Hour",
@@ -134,6 +135,19 @@ pub fn render_popup(app: &App, frame: &mut Frame, image_idx: usize) {
             inner.x + col as u16 + f.custom_cursor as u16,
             inner.y + row as u16,
         ));
+    }
+}
+
+/// An actual calendar date reads far less ambiguously than a bare "+2"
+/// offset - e.g. "Sat Aug 17" rather than making the user do day-of-week
+/// math in their head from a plain day-count.
+fn day_label(offset: u8) -> String {
+    let date = chrono::Local::now().date_naive() + chrono::Days::new(offset as u64);
+    let formatted = date.format("%a %b %-d").to_string();
+    if offset == 0 {
+        format!("{formatted} (Today)")
+    } else {
+        formatted
     }
 }
 

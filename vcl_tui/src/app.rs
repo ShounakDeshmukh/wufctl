@@ -1,10 +1,11 @@
 use crate::config::Config;
 use crate::state::{
-    App, DURATION_PRESETS, FormRow, ImagesUiState, NewReservationFormState, Popup, Reservation,
-    ReservationsUiState, Screen, SetupState, SetupUiState, Toast,
+    App, DURATION_PRESETS, FormRow, ImagesUiState, NewReservationFormState, PendingOp, Popup,
+    Reservation, ReservationsUiState, Screen, SetupState, SetupUiState, Toast,
 };
 use crossterm::event::{self, Event, KeyCode, KeyEventKind, KeyModifiers};
 use ratatui::DefaultTerminal;
+use std::sync::{Arc, mpsc};
 use std::time::{Duration, Instant};
 const VCL_ENDPOINT: &str = "https://vcl.ncsu.edu/scheduling/index.php?mode=xmlrpccall";
 /// Matches the VCL web UI's own poll cadence; also the `r` refresh debounce.
@@ -14,6 +15,9 @@ const RESERVATIONS_POLL_INTERVAL: Duration = Duration::from_secs(20);
 /// with no keypress.
 const EVENT_POLL_RATE: Duration = Duration::from_millis(250);
 const TOAST_DURATION: Duration = Duration::from_secs(3);
+/// Session-scoped image-list cache - reopening the picker reuses it rather
+/// than refetching every time, unless it's older than this.
+const IMAGES_CACHE_INTERVAL: Duration = Duration::from_secs(600);
 
 impl App {
     pub fn new() -> color_eyre::Result<Self> {
@@ -22,9 +26,12 @@ impl App {
             Some(_) => Screen::Reservations,
             None => Screen::Setup,
         };
-        let client = config
-            .as_ref()
-            .map(|cfg| vcl_lib::VclClient::new(VCL_ENDPOINT, cfg.token().to_string()));
+        let client = config.as_ref().map(|cfg| {
+            Arc::new(vcl_lib::VclClient::new(
+                VCL_ENDPOINT,
+                cfg.token().to_string(),
+            ))
+        });
         let rt = tokio::runtime::Builder::new_current_thread()
             .enable_all()
             .build()?;
@@ -33,13 +40,15 @@ impl App {
             popup: Popup::None,
             config,
             exit: false,
-            async_runtime: rt,
+            async_runtime: Arc::new(rt),
             client,
             setup: SetupUiState::default(),
             images: ImagesUiState::default(),
             reservations: ReservationsUiState::default(),
             new_reservation: NewReservationFormState::default(),
             toast: None,
+            pending: None,
+            throbber_state: throbber_widgets_tui::ThrobberState::default(),
         })
     }
 
@@ -52,25 +61,102 @@ impl App {
 
     pub fn run(&mut self, terminal: &mut DefaultTerminal) -> color_eyre::Result<()> {
         while !self.exit {
-            if self.popup == Popup::ImagePicker && !self.images.loaded {
-                self.load_images()?;
-            }
-            if self.screen == Screen::Reservations && self.should_auto_poll_reservations() {
-                self.load_reservations()?;
+            self.poll_pending();
+            // Only ever one background call in flight app-wide - don't
+            // start another while one's still running.
+            if self.pending.is_none() {
+                if self.popup == Popup::ImagePicker && self.images_cache_stale() {
+                    self.trigger_load_images();
+                }
+                if self.screen == Screen::Reservations && self.should_auto_poll_reservations() {
+                    self.trigger_load_reservations();
+                }
             }
             terminal.draw(|f| crate::ui::draw(self, f))?;
-            self.handle_events(terminal)?;
+            self.handle_events()?;
         }
         Ok(())
     }
 
-    /// No busy/toast state yet - the list is simply empty until this
-    /// resolves, which is fine given the confirmed sub-second live latency.
-    fn load_images(&mut self) -> color_eyre::Result<()> {
-        let Some(client) = &self.client else {
-            return Ok(());
+    /// Checks the in-flight background call (if any) without blocking;
+    /// applies its result and clears `pending` once it lands.
+    fn poll_pending(&mut self) {
+        let Some(op) = self.pending.take() else {
+            return;
         };
-        match self.async_runtime.block_on(crate::vcl::get_images(client)) {
+        match op {
+            PendingOp::SetupTest { token, rx } => match rx.try_recv() {
+                Ok(result) => self.apply_setup_test(token, result),
+                Err(mpsc::TryRecvError::Empty) => {
+                    self.pending = Some(PendingOp::SetupTest { token, rx });
+                }
+                Err(mpsc::TryRecvError::Disconnected) => {
+                    self.setup.state =
+                        SetupState::Error("Background sign-in task failed unexpectedly.".into());
+                }
+            },
+            PendingOp::LoadImages(rx) => match rx.try_recv() {
+                Ok(result) => self.apply_load_images(result),
+                Err(mpsc::TryRecvError::Empty) => self.pending = Some(PendingOp::LoadImages(rx)),
+                Err(mpsc::TryRecvError::Disconnected) => {
+                    self.images.error = Some("Background load task failed unexpectedly.".into());
+                    self.images.last_loaded = Some(Instant::now());
+                }
+            },
+            PendingOp::LoadReservations(rx) => match rx.try_recv() {
+                Ok(result) => self.apply_load_reservations(result),
+                Err(mpsc::TryRecvError::Empty) => {
+                    self.pending = Some(PendingOp::LoadReservations(rx));
+                }
+                Err(mpsc::TryRecvError::Disconnected) => {
+                    self.reservations.error =
+                        Some("Background load task failed unexpectedly.".into());
+                }
+            },
+            PendingOp::EndReservation { id, index, rx } => match rx.try_recv() {
+                Ok(result) => self.apply_end_reservation(id, index, result),
+                Err(mpsc::TryRecvError::Empty) => {
+                    self.pending = Some(PendingOp::EndReservation { id, index, rx });
+                }
+                Err(mpsc::TryRecvError::Disconnected) => {
+                    self.reservations.message =
+                        Some(Err("Background task failed unexpectedly.".into()));
+                }
+            },
+            PendingOp::AddRequest(rx) => match rx.try_recv() {
+                Ok(result) => self.apply_add_request(result),
+                Err(mpsc::TryRecvError::Empty) => self.pending = Some(PendingOp::AddRequest(rx)),
+                Err(mpsc::TryRecvError::Disconnected) => {
+                    self.new_reservation.message =
+                        Some("Background task failed unexpectedly.".into());
+                }
+            },
+        }
+    }
+
+    /// `true` on first open, or once `IMAGES_CACHE_INTERVAL` has passed
+    /// since the last successful load.
+    fn images_cache_stale(&self) -> bool {
+        self.images
+            .last_loaded
+            .is_none_or(|t| t.elapsed() >= IMAGES_CACHE_INTERVAL)
+    }
+
+    fn trigger_load_images(&mut self) {
+        let Some(client) = self.client.clone() else {
+            return;
+        };
+        let rt = Arc::clone(&self.async_runtime);
+        let (tx, rx) = mpsc::channel();
+        std::thread::spawn(move || {
+            let result = rt.block_on(crate::vcl::get_images(&client));
+            let _ = tx.send(result);
+        });
+        self.pending = Some(PendingOp::LoadImages(rx));
+    }
+
+    fn apply_load_images(&mut self, result: color_eyre::Result<Vec<crate::vcl::Image>>) {
+        match result {
             Ok(images) => {
                 self.images
                     .list_state
@@ -80,8 +166,7 @@ impl App {
             }
             Err(err) => self.images.error = Some(format!("{err:#}")),
         }
-        self.images.loaded = true;
-        Ok(())
+        self.images.last_loaded = Some(Instant::now());
     }
 
     /// `true` on first load, or once `RESERVATIONS_POLL_INTERVAL` has
@@ -108,68 +193,66 @@ impl App {
     }
 
     /// Fetches the list (id + image name, both confirmed live in
-    /// `get_request_ids()`'s response) then one status per id.
-    fn load_reservations(&mut self) -> color_eyre::Result<()> {
-        self.reservations.last_poll = Some(std::time::Instant::now());
-        let Some(client) = &self.client else {
-            return Ok(());
+    /// `get_request_ids()`'s response) then one status per id, all inside
+    /// the background thread's single `block_on` call.
+    fn trigger_load_reservations(&mut self) {
+        self.reservations.last_poll = Some(Instant::now());
+        let Some(client) = self.client.clone() else {
+            return;
         };
-        let entries = match self
-            .async_runtime
-            .block_on(crate::vcl::get_request_ids(client))
-        {
-            Ok(entries) => entries,
-            Err(err) => {
-                self.reservations.error = Some(format!("{err:#}"));
-                return Ok(());
-            }
-        };
-
-        let mut reservations = Vec::with_capacity(entries.len());
-        for entry in entries {
-            let status = match self
-                .async_runtime
-                .block_on(crate::vcl::get_request_status(client, entry.requestid))
-            {
-                Ok(status) => status,
-                Err(err) => {
-                    self.reservations.error = Some(format!("{err:#}"));
-                    return Ok(());
+        let rt = Arc::clone(&self.async_runtime);
+        let (tx, rx) = mpsc::channel();
+        std::thread::spawn(move || {
+            let result = rt.block_on(async {
+                let entries = crate::vcl::get_request_ids(&client).await?;
+                let mut reservations = Vec::with_capacity(entries.len());
+                for entry in entries {
+                    let status = crate::vcl::get_request_status(&client, entry.requestid).await?;
+                    reservations.push(Reservation {
+                        id: entry.requestid,
+                        image_name: entry.imagename,
+                        status,
+                    });
                 }
-            };
-            reservations.push(Reservation {
-                id: entry.requestid,
-                image_name: entry.imagename,
-                status,
+                Ok(reservations)
             });
-        }
+            let _ = tx.send(result);
+        });
+        self.pending = Some(PendingOp::LoadReservations(rx));
+    }
 
-        // Preserve the current selection across a refresh instead of
-        // jumping back to the top every 20s.
-        let selected = self.reservations.list_state.selected().unwrap_or(0);
-        self.reservations
-            .list_state
-            .select(if reservations.is_empty() {
-                None
-            } else {
-                Some(selected.min(reservations.len() - 1))
-            });
-        self.reservations.reservations = reservations;
-        self.reservations.error = None;
-        Ok(())
+    fn apply_load_reservations(&mut self, result: color_eyre::Result<Vec<Reservation>>) {
+        match result {
+            Ok(reservations) => {
+                // Preserve the current selection across a refresh instead
+                // of jumping back to the top every 20s.
+                let selected = self.reservations.list_state.selected().unwrap_or(0);
+                self.reservations
+                    .list_state
+                    .select(if reservations.is_empty() {
+                        None
+                    } else {
+                        Some(selected.min(reservations.len() - 1))
+                    });
+                self.reservations.reservations = reservations;
+                self.reservations.error = None;
+            }
+            Err(err) => self.reservations.error = Some(format!("{err:#}")),
+        }
     }
 
     /// Times out after `EVENT_POLL_RATE` rather than blocking forever, so
     /// `run()`'s loop wakes up periodically to check the reservations poll
-    /// timer even while the user isn't pressing anything.
-    pub fn handle_events(&mut self, terminal: &mut DefaultTerminal) -> color_eyre::Result<()> {
+    /// timer and the pending background call even while the user isn't
+    /// pressing anything.
+    pub fn handle_events(&mut self) -> color_eyre::Result<()> {
         if !event::poll(EVENT_POLL_RATE)? {
             return Ok(());
         }
         match event::read()? {
             // crossterm also emits key release/repeat events on Windows.
             Event::Key(key_event) if key_event.kind == KeyEventKind::Press => {
-                self.handle_key_event(key_event, terminal)?
+                self.handle_key_event(key_event)?
             }
             Event::Paste(text) => self.handle_paste(text),
             _ => {}
@@ -191,7 +274,6 @@ impl App {
     pub fn handle_key_event(
         &mut self,
         key_event: crossterm::event::KeyEvent,
-        terminal: &mut DefaultTerminal,
     ) -> color_eyre::Result<()> {
         if key_event.modifiers.contains(KeyModifiers::CONTROL)
             && key_event.code == KeyCode::Char('c')
@@ -211,7 +293,7 @@ impl App {
         }
 
         match self.screen {
-            Screen::Setup => self.handle_setup_key(key_event, terminal)?,
+            Screen::Setup => self.handle_setup_key(key_event)?,
             Screen::Reservations => self.handle_reservations_key(key_event)?,
         }
 
@@ -224,7 +306,7 @@ impl App {
     ) -> color_eyre::Result<()> {
         if key_event.code == KeyCode::Char('r') {
             if self.reservations_poll_due() {
-                self.load_reservations()?;
+                self.trigger_load_reservations();
             } else {
                 let last_poll = self
                     .reservations
@@ -241,8 +323,8 @@ impl App {
 
         if key_event.code == KeyCode::Char('n') {
             self.popup = Popup::ImagePicker;
-            // Force a fresh fetch, and drop any stale search, each time.
-            self.images.loaded = false;
+            // Drop any stale search each time; the image list itself is
+            // cached (see `images_cache_stale`), not force-refetched.
             self.images.search.clear();
             self.images.search_cursor = 0;
             self.images.searching = false;
@@ -268,28 +350,50 @@ impl App {
                     .select(Some((i + 1).min(len - 1)));
                 self.reservations.message = None;
             }
-            KeyCode::Char('x') if status == "ready" => self.end_reservation(i),
+            KeyCode::Char('x') if status == "ready" => {
+                if self.pending.is_some() {
+                    // e.g. an auto-poll refresh is mid-flight - don't
+                    // stomp it by starting a second background op.
+                    self.show_toast(Err("Still working - hang on...".to_string()));
+                } else {
+                    self.trigger_end_reservation(i);
+                }
+            }
             KeyCode::Char('e') if status == "ready" => todo!("extend_request - not built yet"),
             _ => {}
         }
         Ok(())
     }
 
-    fn end_reservation(&mut self, i: usize) {
-        let Some(client) = &self.client else { return };
-        let id = self.reservations.reservations[i].id;
-        let result = self
-            .async_runtime
-            .block_on(crate::vcl::end_request(client, id));
+    fn trigger_end_reservation(&mut self, index: usize) {
+        let Some(client) = self.client.clone() else {
+            return;
+        };
+        let id = self.reservations.reservations[index].id;
+        let rt = Arc::clone(&self.async_runtime);
+        let (tx, rx) = mpsc::channel();
+        std::thread::spawn(move || {
+            let result = rt.block_on(crate::vcl::end_request(&client, id));
+            let _ = tx.send(result);
+        });
+        self.pending = Some(PendingOp::EndReservation { id, index, rx });
+    }
+
+    fn apply_end_reservation(
+        &mut self,
+        id: i64,
+        index: usize,
+        result: color_eyre::Result<crate::vcl::ActionResult>,
+    ) {
         self.reservations.message = Some(match result {
             Ok(crate::vcl::ActionResult::Success { .. }) => {
-                self.reservations.reservations.remove(i);
+                self.reservations.reservations.remove(index);
                 self.reservations
                     .list_state
                     .select(if self.reservations.reservations.is_empty() {
                         None
                     } else {
-                        Some(i.min(self.reservations.reservations.len() - 1))
+                        Some(index.min(self.reservations.reservations.len() - 1))
                     });
                 Ok(format!("Reservation #{id} ended."))
             }
@@ -416,6 +520,14 @@ impl App {
         image_idx: usize,
     ) -> color_eyre::Result<()> {
         if key_event.code == KeyCode::Esc {
+            // While AddRequest is pending, this popup is the only thing
+            // that could be in flight - block navigating away, since
+            // apply_add_request unconditionally closes the popup on
+            // success and would otherwise stomp wherever Esc had gone.
+            if self.pending.is_some() {
+                self.show_toast(Err("Still working - hang on...".to_string()));
+                return Ok(());
+            }
             // Back one step, to the picker - not all the way to Reservations.
             self.popup = Popup::ImagePicker;
             self.new_reservation = NewReservationFormState::default();
@@ -434,7 +546,7 @@ impl App {
             KeyCode::Left => self.adjust_new_reservation_field(false),
             KeyCode::Right => self.adjust_new_reservation_field(true),
             KeyCode::Enter if self.new_reservation.focus == FormRow::Create => {
-                self.submit_new_reservation(image_idx)?;
+                self.trigger_submit_new_reservation(image_idx);
             }
             KeyCode::Char(c)
                 if self.new_reservation.focus == FormRow::CustomMinutes && c.is_ascii_digit() =>
@@ -525,29 +637,35 @@ impl App {
         }
     }
 
-    fn submit_new_reservation(&mut self, image_idx: usize) -> color_eyre::Result<()> {
-        let Some(client) = &self.client else {
-            return Ok(());
+    fn trigger_submit_new_reservation(&mut self, image_idx: usize) {
+        let Some(client) = self.client.clone() else {
+            return;
         };
         let Some(length) = self.new_reservation.duration_minutes() else {
             self.new_reservation.message =
                 Some("Enter a valid custom duration in minutes.".to_string());
-            return Ok(());
+            return;
         };
         let Some(start) = self.new_reservation.start_value() else {
             self.new_reservation.message =
                 Some("Couldn't compute that start time - try a different one.".to_string());
-            return Ok(());
+            return;
         };
         let Some(image) = self.images.images.get(image_idx) else {
             self.popup = Popup::None;
-            return Ok(());
+            return;
         };
         let image_id = image.id;
+        let rt = Arc::clone(&self.async_runtime);
+        let (tx, rx) = mpsc::channel();
+        std::thread::spawn(move || {
+            let result = rt.block_on(crate::vcl::add_request(&client, image_id, &start, length));
+            let _ = tx.send(result);
+        });
+        self.pending = Some(PendingOp::AddRequest(rx));
+    }
 
-        let result = self
-            .async_runtime
-            .block_on(crate::vcl::add_request(client, image_id, &start, length));
+    fn apply_add_request(&mut self, result: color_eyre::Result<crate::vcl::ActionResult>) {
         match result {
             Ok(crate::vcl::ActionResult::Success { requestid }) => {
                 self.popup = Popup::None;
@@ -572,7 +690,6 @@ impl App {
                 self.new_reservation.message = Some(format!("{err:#}"));
             }
         }
-        Ok(())
     }
 
     /// Debounced so spamming `n` can't spawn a browser per keypress.
@@ -597,7 +714,6 @@ impl App {
     pub fn handle_setup_key(
         &mut self,
         key_event: crossterm::event::KeyEvent,
-        terminal: &mut DefaultTerminal,
     ) -> color_eyre::Result<()> {
         if key_event.modifiers.contains(KeyModifiers::CONTROL)
             && key_event.code == KeyCode::Char('r')
@@ -615,10 +731,6 @@ impl App {
             if let Ok(text) = arboard::Clipboard::new().and_then(|mut cb| cb.get_text()) {
                 self.handle_paste(text);
             }
-            return Ok(());
-        }
-
-        if matches!(self.setup.state, SetupState::Validating) {
             return Ok(());
         }
 
@@ -640,32 +752,42 @@ impl App {
             KeyCode::Right => {
                 self.setup.cursor = (self.setup.cursor + 1).min(self.setup.input.chars().count())
             }
-            KeyCode::Enter => self.submit_token(terminal)?,
+            KeyCode::Enter if self.pending.is_none() => self.trigger_submit_token(),
             _ => {}
         }
 
         Ok(())
     }
 
-    fn submit_token(&mut self, terminal: &mut DefaultTerminal) -> color_eyre::Result<()> {
+    fn trigger_submit_token(&mut self) {
         let token = self.setup.input.trim().to_string();
         if token.is_empty() {
             self.setup.state = SetupState::Error("Token can't be empty.".to_string());
-            return Ok(());
+            return;
         }
 
+        let rt = Arc::clone(&self.async_runtime);
+        let (tx, rx) = mpsc::channel();
+        let client_token = token.clone();
+        std::thread::spawn(move || {
+            let client = vcl_lib::VclClient::new(VCL_ENDPOINT, client_token);
+            let result = rt
+                .block_on(client.test("vcl_tui"))
+                .map(|_| client)
+                .map_err(color_eyre::eyre::Report::from);
+            let _ = tx.send(result);
+        });
         self.setup.state = SetupState::Validating;
-        terminal.draw(|f| crate::ui::draw(self, f))?;
+        self.pending = Some(PendingOp::SetupTest { token, rx });
+    }
 
-        let client = vcl_lib::VclClient::new(VCL_ENDPOINT, token.clone());
-        let result = self.async_runtime.block_on(client.test("vcl_tui"));
-
+    fn apply_setup_test(&mut self, token: String, result: color_eyre::Result<vcl_lib::VclClient>) {
         match result {
-            Ok(_) => {
+            Ok(client) => {
                 let config = Config::new(token);
                 match config.save() {
                     Ok(()) => {
-                        self.client = Some(client);
+                        self.client = Some(Arc::new(client));
                         self.config = Some(config);
                         self.screen = Screen::Reservations;
                         self.setup = SetupUiState::default();
@@ -675,7 +797,5 @@ impl App {
             }
             Err(err) => self.setup.state = SetupState::Error(format!("{err}")),
         }
-
-        Ok(())
     }
 }

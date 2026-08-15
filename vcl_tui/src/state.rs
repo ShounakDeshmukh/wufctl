@@ -1,4 +1,6 @@
 use crate::config::Config;
+use std::sync::Arc;
+use std::sync::mpsc::Receiver;
 
 /// Only two real screens now - Images/Connect are popups or redirects
 /// over Reservations (see PLAN.md's nav-redesign scope decision), not
@@ -55,9 +57,10 @@ pub struct ImagesUiState {
     pub list_state: ratatui::widgets::ListState,
     /// No toast system yet - shown inline in place of the list.
     pub error: Option<String>,
-    /// Set once `get_images()` has been attempted, success or failure, so
-    /// `run()` doesn't refetch every tick on a genuinely empty catalog.
-    pub loaded: bool,
+    /// `None` until the first load; also gates the 10-minute session cache,
+    /// so reopening the picker reuses the cached list instead of
+    /// refetching every time, unless it's gone stale.
+    pub last_loaded: Option<std::time::Instant>,
     /// Inline feedback for the last `n` press (e.g. AVD guide opened),
     /// `Ok` styled as success and `Err` as danger.
     pub message: Option<Result<String, String>>,
@@ -238,9 +241,10 @@ impl NewReservationFormState {
     }
 
     /// `"now"`, or a Unix timestamp string for the configured day/time.
-    /// `None` only for a local time that doesn't exist (a spring-forward
-    /// DST gap landing exactly on the chosen minute) - rare enough that
-    /// surfacing it as a form error is fine rather than special-casing it.
+    /// `None` if that time doesn't exist (a spring-forward DST gap) or has
+    /// already passed (e.g. Today + an hour earlier than right now) - the
+    /// server would reject either anyway, so catching it client-side gives
+    /// a clearer message than a raw API error.
     pub fn start_value(&self) -> Option<String> {
         match self.start {
             StartChoice::Now => Some("now".to_string()),
@@ -264,20 +268,48 @@ impl NewReservationFormState {
         // ambiguous (fall-back) local time; only a nonexistent
         // (spring-forward gap) time returns None.
         let local = Local.from_local_datetime(&date.and_time(time)).earliest()?;
+        if local.timestamp() <= Local::now().timestamp() {
+            return None;
+        }
         Some(local.timestamp())
     }
 }
 
+/// A network call running on a background thread (see `app.rs`'s trigger/
+/// apply functions), polled once per tick in `run()`. At most one is ever
+/// in flight app-wide - see the module doc note on `App::pending`.
+pub enum PendingOp {
+    SetupTest {
+        token: String,
+        rx: Receiver<color_eyre::Result<vcl_lib::VclClient>>,
+    },
+    LoadImages(Receiver<color_eyre::Result<Vec<crate::vcl::Image>>>),
+    LoadReservations(Receiver<color_eyre::Result<Vec<Reservation>>>),
+    EndReservation {
+        id: i64,
+        index: usize,
+        rx: Receiver<color_eyre::Result<crate::vcl::ActionResult>>,
+    },
+    AddRequest(Receiver<color_eyre::Result<crate::vcl::ActionResult>>),
+}
+
+/// Only one popup/screen is ever visible at a time, so `pending` is a
+/// single app-wide slot rather than one per screen - simplest model that
+/// avoids reasoning about concurrent background calls racing each other
+/// (e.g. an auto-poll refresh landing mid-`end_request`). While it's
+/// `Some`, `handle_key_event` freezes all input except Ctrl+C.
 pub struct App {
     pub screen: Screen,
     pub popup: Popup,
     pub config: Option<Config>,
     pub exit: bool,
-    pub async_runtime: tokio::runtime::Runtime,
-    pub client: Option<vcl_lib::VclClient>,
+    pub async_runtime: Arc<tokio::runtime::Runtime>,
+    pub client: Option<Arc<vcl_lib::VclClient>>,
     pub setup: SetupUiState,
     pub images: ImagesUiState,
     pub reservations: ReservationsUiState,
     pub new_reservation: NewReservationFormState,
     pub toast: Option<Toast>,
+    pub pending: Option<PendingOp>,
+    pub throbber_state: throbber_widgets_tui::ThrobberState,
 }

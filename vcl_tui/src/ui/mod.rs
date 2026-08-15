@@ -22,6 +22,12 @@ pub fn draw(app: &mut App, frame: &mut Frame) {
     {
         app.toast = None;
     }
+    // Only actually animates while a background call is in flight - the
+    // whole point is to advance one frame per draw, so it keeps spinning
+    // even though the call itself blocks a background thread, not this one.
+    if app.pending.is_some() {
+        app.throbber_state.calc_next();
+    }
 
     match app.screen {
         Screen::Setup => setup::render(app, frame),
@@ -39,6 +45,24 @@ pub fn draw(app: &mut App, frame: &mut Frame) {
     }
 
     render_toast(app, frame);
+}
+
+/// Centered throbber + label within `area` - each screen calls this inside
+/// whichever panel is actually waiting on the content that would fill it
+/// (e.g. the list box on first load), rather than a generic global corner
+/// indicator that doesn't say what's loading or where.
+pub fn render_throbber(app: &mut App, frame: &mut Frame, area: Rect, label: &'static str) {
+    let text_width = (label.chars().count() as u16 + 2).min(area.width);
+    let row = Rect {
+        x: area.x + area.width.saturating_sub(text_width) / 2,
+        y: area.y + area.height / 2,
+        width: text_width,
+        height: 1.min(area.height),
+    };
+    let throbber = throbber_widgets_tui::Throbber::default()
+        .label(label)
+        .throbber_style(theme::info());
+    frame.render_stateful_widget(throbber, row, &mut app.throbber_state);
 }
 
 /// Bottom-right, drawn last so it overlays whatever's underneath - matches
