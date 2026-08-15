@@ -30,7 +30,7 @@ pub async fn get_request_status(client: &vcl_lib::VclClient, id: i64) -> Result<
 }
 
 /// `start` is `"now"` or a Unix timestamp string - the New Reservation
-/// popup (not yet built) is responsible for producing either.
+/// popup is responsible for producing either.
 pub async fn add_request(
     client: &vcl_lib::VclClient,
     image_id: i64,
@@ -45,4 +45,12 @@ pub async fn add_request(
 
 pub async fn end_request(client: &vcl_lib::VclClient, id: i64) -> Result<ActionResult> {
     ActionResult::try_from(&client.end_request(id).await?)
+}
+
+pub async fn extend_request(
+    client: &vcl_lib::VclClient,
+    id: i64,
+    minutes: i64,
+) -> Result<ActionResult> {
+    ActionResult::try_from(&client.extend_request(id, minutes).await?)
 }

@@ -126,7 +126,7 @@ fn render_details(app: &mut App, frame: &mut Frame, area: Rect) {
                 Span::raw("   "),
                 Span::styled("[e]", theme::accent()),
                 Span::raw(" "),
-                Span::styled("Extend +15m", theme::dim()),
+                Span::styled("Extend", theme::dim()),
             ]));
             lines.push(Line::from(vec![
                 Span::styled("[x]", theme::accent()),

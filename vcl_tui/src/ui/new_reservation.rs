@@ -31,7 +31,7 @@ pub fn render_popup(app: &mut App, frame: &mut Frame, image_idx: usize) {
     let mut lines = vec![
         Line::from(format!("Image: {image_name}")),
         Line::from(""),
-        field_line(
+        super::field_line(
             "Start",
             f.focus == FormRow::Start,
             match f.start {
@@ -42,22 +42,22 @@ pub fn render_popup(app: &mut App, frame: &mut Frame, image_idx: usize) {
     ];
 
     if f.start == StartChoice::Later {
-        lines.push(field_line(
+        lines.push(super::field_line(
             "Day",
             f.focus == FormRow::Day,
             day_label(f.day_offset),
         ));
-        lines.push(field_line(
+        lines.push(super::field_line(
             "Hour",
             f.focus == FormRow::Hour,
             f.hour.to_string(),
         ));
-        lines.push(field_line(
+        lines.push(super::field_line(
             "Minute",
             f.focus == FormRow::Minute,
             format!("{:02}", MINUTE_STEPS[f.minute_idx as usize]),
         ));
-        lines.push(field_line(
+        lines.push(super::field_line(
             "AM/PM",
             f.focus == FormRow::AmPm,
             match f.am_pm {
@@ -68,7 +68,7 @@ pub fn render_popup(app: &mut App, frame: &mut Frame, image_idx: usize) {
     }
 
     let is_custom = f.duration_idx == DURATION_PRESETS.len();
-    lines.push(field_line(
+    lines.push(super::field_line(
         "Duration",
         f.focus == FormRow::Duration,
         if is_custom {
@@ -149,24 +149,4 @@ fn day_label(offset: u8) -> String {
     } else {
         formatted
     }
-}
-
-/// One "> Label : < value >" row - the spinner-style affordance signals
-/// `Left`/`Right` cycles it; unfocused rows drop the marker and brackets.
-fn field_line(label: &str, focused: bool, value: String) -> Line<'static> {
-    let marker = if focused { "> " } else { "  " };
-    let value_text = if focused {
-        format!("< {value} >")
-    } else {
-        value
-    };
-    let style = if focused {
-        theme::accent()
-    } else {
-        Style::default()
-    };
-    Line::from(vec![
-        Span::raw(format!("{marker}{label:<8}: ")),
-        Span::styled(value_text, style),
-    ])
 }

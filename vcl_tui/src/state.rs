@@ -20,6 +20,9 @@ pub enum Popup {
     NewReservationForm {
         image_idx: usize,
     },
+    ExtendForm {
+        id: i64,
+    },
 }
 
 #[derive(Debug, Default)]
@@ -275,6 +278,51 @@ impl NewReservationFormState {
     }
 }
 
+/// Extend's own preset list, confirmed live from the web UI's "Extend
+/// reservation by" dropdown - shorter-grained than `DURATION_PRESETS` and
+/// with no "Custom" option (the real dialog doesn't offer one either). No
+/// client-side max here either - the actual cap is dynamic per-reservation
+/// (depends how much time is already used against the account's total),
+/// which isn't exposed by any confirmed-working API call, so this relies
+/// entirely on the server's error response, same as `add_request`.
+pub const EXTEND_PRESETS: &[(i64, &str)] = &[
+    (15, "15 min"),
+    (30, "30 min"),
+    (45, "45 min"),
+    (60, "1 hr"),
+    (120, "2 hr"),
+    (240, "4 hr"),
+    (360, "6 hr"),
+    (480, "8 hr"),
+];
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ExtendRow {
+    Duration,
+    Confirm,
+}
+
+/// Same spinner-form spirit as `NewReservationFormState`, just one field -
+/// reset to `default()` every time the popup is left.
+pub struct ExtendFormState {
+    pub focus: ExtendRow,
+    /// Index into `EXTEND_PRESETS`.
+    pub duration_idx: usize,
+    /// Inline feedback for the last submit attempt - only ever an error;
+    /// success closes the popup and shows a toast instead.
+    pub message: Option<String>,
+}
+
+impl Default for ExtendFormState {
+    fn default() -> Self {
+        Self {
+            focus: ExtendRow::Duration,
+            duration_idx: 0, // 15 min - the web UI's own default
+            message: None,
+        }
+    }
+}
+
 /// A network call running on a background thread (see `app.rs`'s trigger/
 /// apply functions), polled once per tick in `run()`. At most one is ever
 /// in flight app-wide - see the module doc note on `App::pending`.
@@ -291,6 +339,10 @@ pub enum PendingOp {
         rx: Receiver<color_eyre::Result<crate::vcl::ActionResult>>,
     },
     AddRequest(Receiver<color_eyre::Result<crate::vcl::ActionResult>>),
+    ExtendRequest {
+        id: i64,
+        rx: Receiver<color_eyre::Result<crate::vcl::ActionResult>>,
+    },
 }
 
 /// Only one popup/screen is ever visible at a time, so `pending` is a
@@ -309,6 +361,7 @@ pub struct App {
     pub images: ImagesUiState,
     pub reservations: ReservationsUiState,
     pub new_reservation: NewReservationFormState,
+    pub extend: ExtendFormState,
     pub toast: Option<Toast>,
     pub pending: Option<PendingOp>,
     pub throbber_state: throbber_widgets_tui::ThrobberState,

@@ -1,3 +1,4 @@
+pub mod extend;
 pub mod images;
 pub mod new_reservation;
 pub mod reservations;
@@ -6,7 +7,7 @@ pub mod setup;
 use ratatui::{
     Frame,
     layout::{Constraint, Layout, Rect},
-    style::Modifier,
+    style::{Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Borders, Clear, Paragraph},
 };
@@ -42,9 +43,32 @@ pub fn draw(app: &mut App, frame: &mut Frame) {
         Popup::NewReservationForm { image_idx } => {
             new_reservation::render_popup(app, frame, image_idx)
         }
+        Popup::ExtendForm { id } => extend::render_popup(app, frame, id),
     }
 
     render_toast(app, frame);
+}
+
+/// One "> Label : < value >" row for a spinner-style form field - the
+/// `< >` bracket affordance signals `Left`/`Right` cycles it; unfocused
+/// rows drop the marker and brackets. Shared by the New Reservation and
+/// Extend popups.
+pub fn field_line(label: &str, focused: bool, value: String) -> Line<'static> {
+    let marker = if focused { "> " } else { "  " };
+    let value_text = if focused {
+        format!("< {value} >")
+    } else {
+        value
+    };
+    let style = if focused {
+        theme::accent()
+    } else {
+        Style::default()
+    };
+    Line::from(vec![
+        Span::raw(format!("{marker}{label:<8}: ")),
+        Span::styled(value_text, style),
+    ])
 }
 
 /// Centered throbber + label within `area` - each screen calls this inside

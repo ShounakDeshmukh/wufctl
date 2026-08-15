@@ -1,7 +1,8 @@
 use crate::config::Config;
 use crate::state::{
-    App, DURATION_PRESETS, FormRow, ImagesUiState, NewReservationFormState, PendingOp, Popup,
-    Reservation, ReservationsUiState, Screen, SetupState, SetupUiState, Toast,
+    App, DURATION_PRESETS, EXTEND_PRESETS, ExtendFormState, ExtendRow, FormRow, ImagesUiState,
+    NewReservationFormState, PendingOp, Popup, Reservation, ReservationsUiState, Screen,
+    SetupState, SetupUiState, Toast,
 };
 use crossterm::event::{self, Event, KeyCode, KeyEventKind, KeyModifiers};
 use ratatui::DefaultTerminal;
@@ -46,6 +47,7 @@ impl App {
             images: ImagesUiState::default(),
             reservations: ReservationsUiState::default(),
             new_reservation: NewReservationFormState::default(),
+            extend: ExtendFormState::default(),
             toast: None,
             pending: None,
             throbber_state: throbber_widgets_tui::ThrobberState::default(),
@@ -129,6 +131,15 @@ impl App {
                 Err(mpsc::TryRecvError::Disconnected) => {
                     self.new_reservation.message =
                         Some("Background task failed unexpectedly.".into());
+                }
+            },
+            PendingOp::ExtendRequest { id, rx } => match rx.try_recv() {
+                Ok(result) => self.apply_extend_request(id, result),
+                Err(mpsc::TryRecvError::Empty) => {
+                    self.pending = Some(PendingOp::ExtendRequest { id, rx });
+                }
+                Err(mpsc::TryRecvError::Disconnected) => {
+                    self.extend.message = Some("Background task failed unexpectedly.".into());
                 }
             },
         }
@@ -290,6 +301,7 @@ impl App {
             Popup::NewReservationForm { image_idx } => {
                 return self.handle_new_reservation_key(key_event, image_idx);
             }
+            Popup::ExtendForm { id } => return self.handle_extend_key(key_event, id),
         }
 
         match self.screen {
@@ -359,7 +371,12 @@ impl App {
                     self.trigger_end_reservation(i);
                 }
             }
-            KeyCode::Char('e') if status == "ready" => todo!("extend_request - not built yet"),
+            KeyCode::Char('e') if status == "ready" => {
+                self.popup = Popup::ExtendForm {
+                    id: self.reservations.reservations[i].id,
+                };
+                self.extend = ExtendFormState::default();
+            }
             _ => {}
         }
         Ok(())
@@ -400,6 +417,89 @@ impl App {
             Ok(crate::vcl::ActionResult::Error { errormsg, .. }) => Err(errormsg),
             Err(err) => Err(format!("{err:#}")),
         });
+    }
+
+    fn handle_extend_key(
+        &mut self,
+        key_event: crossterm::event::KeyEvent,
+        id: i64,
+    ) -> color_eyre::Result<()> {
+        if key_event.code == KeyCode::Esc {
+            // Only ExtendRequest could be pending while this popup is
+            // open - block navigating away mid-submit, same reasoning as
+            // the New Reservation form's Esc guard.
+            if self.pending.is_some() {
+                self.show_toast(Err("Still working - hang on...".to_string()));
+                return Ok(());
+            }
+            self.popup = Popup::None;
+            self.extend = ExtendFormState::default();
+            return Ok(());
+        }
+
+        match key_event.code {
+            KeyCode::Up => self.extend.focus = ExtendRow::Duration,
+            KeyCode::Down => self.extend.focus = ExtendRow::Confirm,
+            KeyCode::Left => self.adjust_extend_duration(false),
+            KeyCode::Right => self.adjust_extend_duration(true),
+            KeyCode::Enter if self.extend.focus == ExtendRow::Confirm => {
+                self.trigger_extend_request(id);
+            }
+            _ => {}
+        }
+        Ok(())
+    }
+
+    fn adjust_extend_duration(&mut self, forward: bool) {
+        let len = EXTEND_PRESETS.len();
+        self.extend.duration_idx = if forward {
+            (self.extend.duration_idx + 1) % len
+        } else {
+            (self.extend.duration_idx + len - 1) % len
+        };
+    }
+
+    fn trigger_extend_request(&mut self, id: i64) {
+        let Some(client) = self.client.clone() else {
+            return;
+        };
+        let Some(&(minutes, _)) = EXTEND_PRESETS.get(self.extend.duration_idx) else {
+            return;
+        };
+        let rt = Arc::clone(&self.async_runtime);
+        let (tx, rx) = mpsc::channel();
+        std::thread::spawn(move || {
+            let result = rt.block_on(crate::vcl::extend_request(&client, id, minutes));
+            let _ = tx.send(result);
+        });
+        self.pending = Some(PendingOp::ExtendRequest { id, rx });
+    }
+
+    fn apply_extend_request(
+        &mut self,
+        id: i64,
+        result: color_eyre::Result<crate::vcl::ActionResult>,
+    ) {
+        match result {
+            Ok(crate::vcl::ActionResult::Success { .. }) => {
+                self.popup = Popup::None;
+                self.extend = ExtendFormState::default();
+                // Server is the source of truth - force a fresh fetch,
+                // same reasoning as a successful add_request.
+                self.reservations.last_poll = None;
+                self.show_toast(Ok(format!("Reservation #{id} extended.")));
+            }
+            Ok(crate::vcl::ActionResult::Error { errormsg, .. }) => {
+                self.extend.message = Some(errormsg);
+            }
+            Err(err) => {
+                self.extend.message = Some(describe_rejected_connection(
+                    &err,
+                    "this extension likely exceeds your account's total time limit. \
+                     Try a shorter extension.",
+                ));
+            }
+        }
     }
 
     fn handle_image_picker_key(
@@ -681,7 +781,11 @@ impl App {
                 self.new_reservation.message = Some(errormsg);
             }
             Err(err) => {
-                self.new_reservation.message = Some(describe_add_request_error(&err));
+                self.new_reservation.message = Some(describe_rejected_connection(
+                    &err,
+                    "the duration or start time is likely not allowed for this image/account. \
+                     Try a shorter duration or a different start.",
+                ));
             }
         }
     }
@@ -795,15 +899,13 @@ impl App {
 }
 
 /// The server drops the connection outright - no XML-RPC fault, no HTTP
-/// error status - when it rejects `add_request` outright; confirmed live
-/// with an out-of-range custom duration. There's no structured reason in
-/// that case, so a raw connection-failure string is translated into an
-/// actionable guess rather than shown as-is.
-fn describe_add_request_error(err: &color_eyre::eyre::Report) -> String {
+/// error status - when it rejects certain requests outright; confirmed
+/// live for `add_request` with an out-of-range custom duration. There's no
+/// structured reason in that case, so a raw connection-failure string is
+/// translated into an actionable guess (`hint`) rather than shown as-is.
+fn describe_rejected_connection(err: &color_eyre::eyre::Report, hint: &str) -> String {
     if let Some(vcl_lib::VclError::HttpError(_)) = err.downcast_ref::<vcl_lib::VclError>() {
-        return "Server rejected the request - the duration or start time is likely not \
-                allowed for this image/account. Try a shorter duration or a different start."
-            .to_string();
+        return format!("Server rejected the request - {hint}");
     }
     format!("{err:#}")
 }
