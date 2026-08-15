@@ -575,6 +575,17 @@ crate), any HTML-stripping crate (strip `<br>`/tags from
 concern, not worth a dependency), `clap` (no CLI args - the binary launches
 straight into the TUI).
 
+**Added later, not reflected in the `[dependencies]` block above** (that
+block predates several revisions - `anyhow` there is stale too, superseded
+by the `color-eyre` decision noted earlier): `arboard` (system-clipboard
+Ctrl+V fallback on Linux terminals that don't bind it themselves) and
+`chrono` (computing the New Reservation form's `Later`-start Unix
+timestamp from day-offset + hour/minute/AM-PM - needs to be local-timezone
+and DST-aware, which `std::time` can't do; `chrono::Local` handles it via
+the OS tz database; `time` crate's local-offset support was ruled out as
+explicitly unsound in multi-threaded contexts on Unix unless opted into
+with an `unsound_local_offset` feature).
+
 ## Build/verification order
 
 1. **Config + Setup screen, no network yet.** `Config::load()`/`save()`

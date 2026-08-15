@@ -1,7 +1,7 @@
 use crate::config::Config;
 use crate::state::{
-    App, ImagesUiState, Popup, Reservation, ReservationsUiState, Screen, SetupState, SetupUiState,
-    Toast,
+    App, DURATION_PRESETS, FormRow, ImagesUiState, NewReservationFormState, Popup, Reservation,
+    ReservationsUiState, Screen, SetupState, SetupUiState, Toast,
 };
 use crossterm::event::{self, Event, KeyCode, KeyEventKind, KeyModifiers};
 use ratatui::DefaultTerminal;
@@ -38,6 +38,7 @@ impl App {
             setup: SetupUiState::default(),
             images: ImagesUiState::default(),
             reservations: ReservationsUiState::default(),
+            new_reservation: NewReservationFormState::default(),
             toast: None,
         })
     }
@@ -409,15 +410,167 @@ impl App {
         Ok(())
     }
 
-    /// Placeholder - the actual Start/Duration form is step 4.
     fn handle_new_reservation_key(
         &mut self,
         key_event: crossterm::event::KeyEvent,
-        _image_idx: usize,
+        image_idx: usize,
     ) -> color_eyre::Result<()> {
         if key_event.code == KeyCode::Esc {
             // Back one step, to the picker - not all the way to Reservations.
             self.popup = Popup::ImagePicker;
+            self.new_reservation = NewReservationFormState::default();
+            return Ok(());
+        }
+
+        let rows = self.new_reservation.visible_rows();
+        let pos = rows
+            .iter()
+            .position(|&r| r == self.new_reservation.focus)
+            .unwrap_or(0);
+
+        match key_event.code {
+            KeyCode::Up => self.new_reservation.focus = rows[pos.saturating_sub(1)],
+            KeyCode::Down => self.new_reservation.focus = rows[(pos + 1).min(rows.len() - 1)],
+            KeyCode::Left => self.adjust_new_reservation_field(false),
+            KeyCode::Right => self.adjust_new_reservation_field(true),
+            KeyCode::Enter if self.new_reservation.focus == FormRow::Create => {
+                self.submit_new_reservation(image_idx)?;
+            }
+            KeyCode::Char(c)
+                if self.new_reservation.focus == FormRow::CustomMinutes && c.is_ascii_digit() =>
+            {
+                let idx = crate::utils::char_to_byte_index(
+                    &self.new_reservation.custom_minutes,
+                    self.new_reservation.custom_cursor,
+                );
+                self.new_reservation.custom_minutes.insert(idx, c);
+                self.new_reservation.custom_cursor += 1;
+            }
+            KeyCode::Backspace
+                if self.new_reservation.focus == FormRow::CustomMinutes
+                    && self.new_reservation.custom_cursor > 0 =>
+            {
+                let idx = crate::utils::char_to_byte_index(
+                    &self.new_reservation.custom_minutes,
+                    self.new_reservation.custom_cursor - 1,
+                );
+                self.new_reservation.custom_minutes.remove(idx);
+                self.new_reservation.custom_cursor -= 1;
+            }
+            _ => {}
+        }
+        Ok(())
+    }
+
+    /// `Left`/`Right` on the focused row: cycles that row's value, except
+    /// on `CustomMinutes` where it moves the text cursor instead.
+    fn adjust_new_reservation_field(&mut self, forward: bool) {
+        use crate::state::{AmPm, StartChoice};
+        let f = &mut self.new_reservation;
+        match f.focus {
+            FormRow::Start => {
+                f.start = if f.start == StartChoice::Now {
+                    StartChoice::Later
+                } else {
+                    StartChoice::Now
+                };
+            }
+            FormRow::Day => {
+                f.day_offset = if forward {
+                    (f.day_offset + 1).min(7)
+                } else {
+                    f.day_offset.saturating_sub(1)
+                };
+            }
+            FormRow::Hour => {
+                f.hour = if forward {
+                    if f.hour == 12 { 1 } else { f.hour + 1 }
+                } else if f.hour == 1 {
+                    12
+                } else {
+                    f.hour - 1
+                };
+            }
+            FormRow::Minute => {
+                let len = crate::state::MINUTE_STEPS.len() as u8;
+                f.minute_idx = if forward {
+                    (f.minute_idx + 1) % len
+                } else {
+                    (f.minute_idx + len - 1) % len
+                };
+            }
+            FormRow::AmPm => {
+                f.am_pm = if f.am_pm == AmPm::Am {
+                    AmPm::Pm
+                } else {
+                    AmPm::Am
+                };
+            }
+            FormRow::Duration => {
+                let len = DURATION_PRESETS.len() + 1; // +1 for "Custom"
+                f.duration_idx = if forward {
+                    (f.duration_idx + 1) % len
+                } else {
+                    (f.duration_idx + len - 1) % len
+                };
+            }
+            FormRow::CustomMinutes => {
+                f.custom_cursor = if forward {
+                    (f.custom_cursor + 1).min(f.custom_minutes.chars().count())
+                } else {
+                    f.custom_cursor.saturating_sub(1)
+                };
+            }
+            FormRow::Create => {}
+        }
+    }
+
+    fn submit_new_reservation(&mut self, image_idx: usize) -> color_eyre::Result<()> {
+        let Some(client) = &self.client else {
+            return Ok(());
+        };
+        let Some(length) = self.new_reservation.duration_minutes() else {
+            self.new_reservation.message =
+                Some("Enter a valid custom duration in minutes.".to_string());
+            return Ok(());
+        };
+        let Some(start) = self.new_reservation.start_value() else {
+            self.new_reservation.message =
+                Some("Couldn't compute that start time - try a different one.".to_string());
+            return Ok(());
+        };
+        let Some(image) = self.images.images.get(image_idx) else {
+            self.popup = Popup::None;
+            return Ok(());
+        };
+        let image_id = image.id;
+
+        let result = self
+            .async_runtime
+            .block_on(crate::vcl::add_request(client, image_id, &start, length));
+        match result {
+            Ok(crate::vcl::ActionResult::Success { requestid }) => {
+                self.popup = Popup::None;
+                self.new_reservation = NewReservationFormState::default();
+                // Server is the source of truth - force a fresh fetch
+                // (rather than inserting a locally-guessed row) next
+                // time `run()`'s loop checks the poll timer.
+                self.reservations.last_poll = None;
+                let message = match requestid {
+                    Some(id) => format!("Reservation #{id} created."),
+                    None => "Reservation created.".to_string(),
+                };
+                self.show_toast(Ok(message));
+            }
+            Ok(crate::vcl::ActionResult::Error {
+                errorcode,
+                errormsg,
+            }) => {
+                self.new_reservation.message = Some(format!("[{errorcode}] {errormsg}"));
+            }
+            Err(err) => {
+                self.new_reservation.message = Some(format!("{err:#}"));
+            }
         }
         Ok(())
     }

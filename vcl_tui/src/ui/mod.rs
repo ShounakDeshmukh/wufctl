@@ -1,4 +1,5 @@
 pub mod images;
+pub mod new_reservation;
 pub mod reservations;
 pub mod setup;
 
@@ -33,39 +34,11 @@ pub fn draw(app: &mut App, frame: &mut Frame) {
         Popup::None => {}
         Popup::ImagePicker => images::render_popup(app, frame),
         Popup::NewReservationForm { image_idx } => {
-            render_new_reservation_placeholder(app, frame, image_idx)
+            new_reservation::render_popup(app, frame, image_idx)
         }
     }
 
     render_toast(app, frame);
-}
-
-/// Placeholder - the real Start/Duration form is step 4.
-fn render_new_reservation_placeholder(app: &App, frame: &mut Frame, image_idx: usize) {
-    let area = centered_rect(40, 9, frame.area());
-    frame.render_widget(Clear, area);
-    let block = theme::block().title("New Reservation");
-    let inner = block.inner(area);
-    frame.render_widget(block, area);
-
-    let name = app
-        .images
-        .images
-        .get(image_idx)
-        .map(|img| img.name.as_str())
-        .unwrap_or("(unknown)");
-    let lines = vec![
-        Line::from(format!("Image: {name}")),
-        Line::from(""),
-        Line::styled("Start/Duration form coming next.", theme::dim()),
-        Line::from(""),
-        Line::from(vec![
-            Span::styled("[Esc]", theme::accent()),
-            Span::raw(" "),
-            Span::styled("Back", theme::dim()),
-        ]),
-    ];
-    frame.render_widget(Paragraph::new(lines), inner);
 }
 
 /// Bottom-right, drawn last so it overlays whatever's underneath - matches
