@@ -2,7 +2,7 @@ use ratatui::{
     Frame,
     style::{Modifier, Style},
     text::{Line, Span},
-    widgets::{Clear, Paragraph},
+    widgets::{Clear, Paragraph, Wrap},
 };
 
 use crate::state::{AmPm, App, DURATION_PRESETS, FormRow, MINUTE_STEPS, PendingOp, StartChoice};
@@ -128,7 +128,7 @@ pub fn render_popup(app: &mut App, frame: &mut Frame, image_idx: usize) {
         Span::raw(" Back"),
     ]));
 
-    frame.render_widget(Paragraph::new(lines), inner);
+    frame.render_widget(Paragraph::new(lines).wrap(Wrap { trim: false }), inner);
 
     if let Some((col, row)) = custom_minutes_cursor {
         frame.set_cursor_position((

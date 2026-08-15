@@ -687,7 +687,7 @@ impl App {
                 self.new_reservation.message = Some(format!("[{errorcode}] {errormsg}"));
             }
             Err(err) => {
-                self.new_reservation.message = Some(format!("{err:#}"));
+                self.new_reservation.message = Some(describe_add_request_error(&err));
             }
         }
     }
@@ -798,4 +798,18 @@ impl App {
             Err(err) => self.setup.state = SetupState::Error(format!("{err}")),
         }
     }
+}
+
+/// The server drops the connection outright - no XML-RPC fault, no HTTP
+/// error status - when it rejects `add_request` outright; confirmed live
+/// with an out-of-range custom duration. There's no structured reason in
+/// that case, so a raw connection-failure string is translated into an
+/// actionable guess rather than shown as-is.
+fn describe_add_request_error(err: &color_eyre::eyre::Report) -> String {
+    if let Some(vcl_lib::VclError::HttpError(_)) = err.downcast_ref::<vcl_lib::VclError>() {
+        return "Server rejected the request - the duration or start time is likely not \
+                allowed for this image/account. Try a shorter duration or a different start."
+            .to_string();
+    }
+    format!("{err:#}")
 }
