@@ -345,7 +345,7 @@ impl App {
                     .select(Some((i + 1).min(len - 1)));
                 self.reservations.message = None;
             }
-            KeyCode::Char('x') if status == "ready" => {
+            KeyCode::Char('x') if status != "loading" => {
                 if self.pending.is_some() {
                     // Don't stomp an in-flight call (e.g. an auto-poll refresh) with a second one.
                     self.show_toast(Err("Still working - hang on...".to_string()));

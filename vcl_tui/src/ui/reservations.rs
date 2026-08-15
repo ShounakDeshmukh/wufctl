@@ -140,8 +140,13 @@ fn render_details(app: &mut App, frame: &mut Frame, area: Rect) {
                 theme::dim(),
             ));
         }
-        // Any other status is unexpected, but show it anyway.
-        other => lines.push(Line::styled(format!("Status: {other}"), theme::dim())),
+        _ => {
+            lines.push(Line::from(vec![
+                Span::styled("[x]", theme::accent()),
+                Span::raw(" "),
+                Span::styled("End reservation", theme::dim()),
+            ]));
+        }
     }
 
     if let Some(msg) = &app.reservations.message {
