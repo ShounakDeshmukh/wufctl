@@ -115,10 +115,6 @@ impl VclClient {
     /// Get client IP address as seen by the VCL server
     ///
     /// Returns a struct with `ip` field containing the client IP.
-    ///
-    /// Note: `XMLRPCgetIP` is not documented in the NCSU VCL XML-RPC
-    /// wrapper reference this client was built against; verify it is
-    /// available on the target server before relying on it.
     pub async fn get_ip(&self) -> Result<Value> {
         self.call("XMLRPCgetIP", vec![]).await
     }
