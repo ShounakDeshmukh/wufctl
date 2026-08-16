@@ -81,27 +81,6 @@ impl Value {
         matches!(self, Value::Struct(_))
     }
 
-    pub fn to_json_string(&self) -> String {
-        match self {
-            Value::Null => "null".to_string(),
-            Value::Bool(b) => b.to_string(),
-            Value::Int(i) => i.to_string(),
-            Value::Double(f) => f.to_string(),
-            Value::String(s) => format!("\"{}\"", escape_json_string(s)),
-            Value::Array(arr) => {
-                let items = arr.iter().map(|v| v.to_json_string()).collect::<Vec<_>>();
-                format!("[{}]", items.join(","))
-            }
-            Value::Struct(map) => {
-                let items = map
-                    .iter()
-                    .map(|(k, v)| format!("\"{}\":{}", escape_json_string(k), v.to_json_string()))
-                    .collect::<Vec<_>>();
-                format!("{{{}}}", items.join(","))
-            }
-        }
-    }
-
     pub fn len(&self) -> Option<usize> {
         match self {
             Value::Array(arr) => Some(arr.len()),
@@ -146,14 +125,6 @@ impl std::fmt::Display for Value {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.to_display_string())
     }
-}
-
-fn escape_json_string(s: &str) -> String {
-    s.replace('\\', "\\\\")
-        .replace('"', "\\\"")
-        .replace('\n', "\\n")
-        .replace('\r', "\\r")
-        .replace('\t', "\\t")
 }
 
 #[cfg(test)]

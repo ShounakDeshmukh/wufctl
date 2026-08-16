@@ -627,26 +627,6 @@ fn test_value_is_empty() {
 }
 
 #[test]
-fn test_value_to_json_string() {
-    assert_eq!(Value::Null.to_json_string(), "null");
-    assert_eq!(Value::Bool(true).to_json_string(), "true");
-    assert_eq!(Value::Int(42).to_json_string(), "42");
-    assert_eq!(
-        Value::String("hello".to_string()).to_json_string(),
-        "\"hello\""
-    );
-}
-
-#[test]
-fn test_value_json_string_escaping() {
-    let s = Value::String("hello\"world".to_string());
-    assert!(s.to_json_string().contains("\\\""));
-
-    let s = Value::String("line1\nline2".to_string());
-    assert!(s.to_json_string().contains("\\n"));
-}
-
-#[test]
 fn test_parse_nested_array() {
     let xml = r#"<?xml version="1.0"?>
 <methodResponse>
