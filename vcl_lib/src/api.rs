@@ -39,7 +39,6 @@ impl VclClient {
     /// - XML-RPC response parsing
     /// - Fault detection and reporting
     pub async fn call(&self, method: &str, args: Vec<Value>) -> Result<Value> {
-        // Validate method name
         if method.is_empty() {
             return Err(VclError::InvalidParameter(
                 "Method name cannot be empty".into(),
@@ -56,11 +55,9 @@ impl VclClient {
             args.len()
         );
 
-        // Build XML-RPC request
         let body = build_request(method, args);
         debug!("Request body:\n{}", body);
 
-        // Make HTTP request with timeout and proper headers
         let response = self
             .http_client
             .post(&self.endpoint)
@@ -94,7 +91,6 @@ impl VclClient {
 
         debug!("Response received: {} bytes", response_text.len());
 
-        // Parse response
         parse_response(&response_text)
     }
 

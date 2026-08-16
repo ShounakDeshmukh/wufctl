@@ -1,6 +1,5 @@
 use crate::value::Value;
 
-/// Build XML-RPC request from method name and arguments
 pub fn build_request(method: &str, args: Vec<Value>) -> String {
     let mut xml = String::from("<?xml version=\"1.0\"?>\n");
     xml.push_str("<methodCall>\n");
@@ -36,13 +35,10 @@ fn value_to_xml(value: &Value, indent: usize) -> String {
             if *b { 1 } else { 0 }
         ),
 
-        // Integers: use <i4> tag (also supports <int>)
         Value::Int(i) => format!("{}<value><i4>{}</i4></value>", ind, i),
 
-        // Floats: use <double> tag
         Value::Double(f) => format!("{}<value><double>{}</double></value>", ind, f),
 
-        // Strings
         Value::String(s) => format!("{}<value><string>{}</string></value>", ind, escape_xml(s)),
 
         // Arrays: per XML-RPC spec, wrapped in <array><data>

@@ -1,27 +1,25 @@
 use std::collections::HashMap;
 
-/// XML-RPC value type following the XML-RPC specification
-/// Supports all standard XML-RPC types used by the NCSU VCL API
+/// XML-RPC value type covering every tag the VCL API uses.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Value {
-    /// Null/nil value
+    /// Maps to XML-RPC `<nil>`.
     Null,
-    /// Boolean (maps to XML-RPC `<boolean>`)
+    /// Maps to XML-RPC `<boolean>`.
     Bool(bool),
-    /// Integer (maps to XML-RPC `<i4>` or `<int>`)
+    /// Maps to XML-RPC `<i4>` or `<int>`.
     Int(i64),
-    /// Double precision floating point
+    /// Maps to XML-RPC `<double>`.
     Double(f64),
-    /// String data
+    /// Maps to XML-RPC `<string>`.
     String(String),
-    /// Array of values (maps to XML-RPC `<array>`)
+    /// Maps to XML-RPC `<array>`.
     Array(Vec<Value>),
-    /// Structure/object (maps to XML-RPC `<struct>`)
+    /// Maps to XML-RPC `<struct>`.
     Struct(HashMap<String, Value>),
 }
 
 impl Value {
-    /// Get as boolean
     pub fn as_bool(&self) -> Option<bool> {
         match self {
             Value::Bool(b) => Some(*b),
@@ -29,7 +27,6 @@ impl Value {
         }
     }
 
-    /// Get as integer
     pub fn as_i64(&self) -> Option<i64> {
         match self {
             Value::Int(i) => Some(*i),
@@ -37,7 +34,6 @@ impl Value {
         }
     }
 
-    /// Get as float
     pub fn as_f64(&self) -> Option<f64> {
         match self {
             Value::Double(f) => Some(*f),
@@ -45,7 +41,6 @@ impl Value {
         }
     }
 
-    /// Get as string
     pub fn as_str(&self) -> Option<&str> {
         match self {
             Value::String(s) => Some(s),
@@ -53,7 +48,6 @@ impl Value {
         }
     }
 
-    /// Get as array
     pub fn as_array(&self) -> Option<&[Value]> {
         match self {
             Value::Array(arr) => Some(arr),
@@ -61,7 +55,6 @@ impl Value {
         }
     }
 
-    /// Get struct field by key
     pub fn get(&self, key: &str) -> Option<&Value> {
         match self {
             Value::Struct(map) => map.get(key),
@@ -69,7 +62,6 @@ impl Value {
         }
     }
 
-    /// Get struct field by key (mutable)
     pub fn get_mut(&mut self, key: &str) -> Option<&mut Value> {
         match self {
             Value::Struct(map) => map.get_mut(key),
@@ -77,22 +69,18 @@ impl Value {
         }
     }
 
-    /// Check if value is null
     pub fn is_null(&self) -> bool {
         matches!(self, Value::Null)
     }
 
-    /// Check if value is an array
     pub fn is_array(&self) -> bool {
         matches!(self, Value::Array(_))
     }
 
-    /// Check if value is a struct/object
     pub fn is_object(&self) -> bool {
         matches!(self, Value::Struct(_))
     }
 
-    /// Convert to JSON-compatible string representation
     pub fn to_json_string(&self) -> String {
         match self {
             Value::Null => "null".to_string(),
@@ -114,7 +102,6 @@ impl Value {
         }
     }
 
-    /// Get the length of an array or struct
     pub fn len(&self) -> Option<usize> {
         match self {
             Value::Array(arr) => Some(arr.len()),
@@ -124,12 +111,10 @@ impl Value {
         }
     }
 
-    /// Check if empty (for arrays, structs, or strings)
     pub fn is_empty(&self) -> bool {
         self.len() == Some(0)
     }
 
-    /// Convert to string representation for Display
     pub fn to_display_string(&self) -> String {
         match self {
             Value::Null => "null".to_string(),
@@ -163,7 +148,6 @@ impl std::fmt::Display for Value {
     }
 }
 
-/// Escape a string for JSON output
 fn escape_json_string(s: &str) -> String {
     s.replace('\\', "\\\\")
         .replace('"', "\\\"")

@@ -1,10 +1,6 @@
-//! Parameter structs for VCL API calls that take more than a handful of
-//! optional fields. Grouping these into structs keeps `VclClient` method
-//! signatures short instead of stacking five-plus positional arguments.
+//! Parameter structs for VCL API calls with more optional fields than fit as positional args.
 
-/// Optional parameters for [`crate::VclClient::deploy_server`]
-/// (`XMLRPCdeployServer`). Every field mirrors a VCL PHP default: unset
-/// strings default to empty, `monitored` defaults to `false`.
+/// Mirrors [`crate::VclClient::deploy_server`]'s PHP defaults: unset strings are empty, `monitored` is `false`.
 #[derive(Debug, Clone, Copy, Default)]
 pub struct DeployServerOptions<'a> {
     pub admin_group: Option<&'a str>,
@@ -17,8 +13,7 @@ pub struct DeployServerOptions<'a> {
     pub user_data: Option<&'a str>,
 }
 
-/// Time-limit fields required by [`crate::VclClient::add_user_group`]
-/// (`XMLRPCaddUserGroup`).
+/// Time-limit fields required by [`crate::VclClient::add_user_group`].
 #[derive(Debug, Clone, Copy)]
 pub struct UserGroupMaxTimes {
     pub initial_max_time: i64,
@@ -28,9 +23,7 @@ pub struct UserGroupMaxTimes {
     pub custom: bool,
 }
 
-/// Optional fields to change via [`crate::VclClient::edit_user_group`]
-/// (`XMLRPCeditUserGroup`). Any field left as `None` is left unchanged,
-/// matching the VCL PHP convention of passing an empty string.
+/// `None` fields are left unchanged by [`crate::VclClient::edit_user_group`], PHP's empty-string convention.
 #[derive(Debug, Clone, Copy, Default)]
 pub struct UserGroupEdits<'a> {
     pub owner: Option<&'a str>,

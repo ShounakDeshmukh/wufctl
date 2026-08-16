@@ -35,7 +35,6 @@ pub fn parse_response(xml: &str) -> Result<Value> {
     value_from_node(value_node)
 }
 
-/// Build the `VclError::ApiError` for a `<fault>` element.
 fn parse_fault(fault: Node) -> VclError {
     let result = child_element(fault, "value")
         .ok_or_else(|| VclError::InvalidResponse("Malformed fault: no <value>".into()))
@@ -55,9 +54,7 @@ fn parse_fault(fault: Node) -> VclError {
     }
 }
 
-/// Convert a `<value>` element into a [`Value`], recursing into nested
-/// arrays and structs. This walks the already-parsed DOM tree rather than
-/// scanning raw text, so nesting depth is handled correctly by construction.
+/// Walks the parsed DOM tree rather than scanning raw text, so nesting depth is never miscounted.
 fn value_from_node(value_node: Node) -> Result<Value> {
     // XML-RPC permits a bare, untyped string: <value>hello</value>
     let Some(type_node) = value_node.children().find(|n| n.is_element()) else {
@@ -94,7 +91,6 @@ fn value_from_node(value_node: Node) -> Result<Value> {
     }
 }
 
-/// Convert an `<array>` element's `<data>` children into `Value::Array`.
 fn array_from_node(array_node: Node) -> Result<Value> {
     let data = child_element(array_node, "data")
         .ok_or_else(|| VclError::XmlParseError("Array missing <data>".into()))?;
@@ -106,7 +102,6 @@ fn array_from_node(array_node: Node) -> Result<Value> {
         .map(Value::Array)
 }
 
-/// Convert a `<struct>` element's `<member>` children into `Value::Struct`.
 fn struct_from_node(struct_node: Node) -> Result<Value> {
     let mut members = HashMap::new();
 
@@ -125,15 +120,12 @@ fn struct_from_node(struct_node: Node) -> Result<Value> {
     Ok(Value::Struct(members))
 }
 
-/// Find the first direct child element with the given tag name.
 fn child_element<'a, 'input>(node: Node<'a, 'input>, tag: &str) -> Option<Node<'a, 'input>> {
     node.children()
         .find(|n| n.is_element() && n.has_tag_name(tag))
 }
 
-/// Concatenate a node's direct text content. `roxmltree` decodes XML
-/// entities (`&lt;`, `&amp;`, etc.) while parsing, so no manual unescaping
-/// step is needed here.
+/// `roxmltree` already decodes XML entities while parsing, so no manual unescaping is needed here.
 fn text_content(node: Node) -> String {
     node.children().filter_map(|n| n.text()).collect()
 }
