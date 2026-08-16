@@ -13,8 +13,7 @@ impl App {
     pub(super) fn handle_extend_key(&mut self, key_event: KeyEvent, id: i64) -> Result<()> {
         if key_event.code == KeyCode::Esc {
             // Block navigating away mid-submit, same as the New Reservation form's Esc guard.
-            if self.pending.is_some() {
-                self.show_toast(Err("Still working - hang on...".to_string()));
+            if self.reject_if_busy() {
                 return Ok(());
             }
             self.popup = Popup::None;
@@ -27,7 +26,7 @@ impl App {
             KeyCode::Down => self.extend.focus = ExtendRow::Confirm,
             KeyCode::Left => self.adjust_extend_duration(false),
             KeyCode::Right => self.adjust_extend_duration(true),
-            KeyCode::Enter if self.extend.focus == ExtendRow::Confirm => {
+            KeyCode::Enter if self.extend.focus == ExtendRow::Confirm && !self.reject_if_busy() => {
                 self.trigger_extend_request(id);
             }
             _ => {}

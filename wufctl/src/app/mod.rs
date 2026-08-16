@@ -65,6 +65,17 @@ impl App {
         });
     }
 
+    /// Every trigger_* call site must check this first - at most one background op runs at a time,
+    /// and clobbering `self.pending` silently drops whichever op was already in flight.
+    pub(super) fn reject_if_busy(&mut self) -> bool {
+        if self.pending.is_some() {
+            self.show_toast(Err("Still working - hang on...".to_string()));
+            true
+        } else {
+            false
+        }
+    }
+
     pub fn run(&mut self, terminal: &mut DefaultTerminal) -> Result<()> {
         while !self.exit {
             self.poll_pending();

@@ -25,8 +25,7 @@ impl App {
         terminal: &mut DefaultTerminal,
     ) -> Result<()> {
         if key_event.code == KeyCode::Esc {
-            if self.pending.is_some() {
-                self.show_toast(Err("Still working - hang on...".to_string()));
+            if self.reject_if_busy() {
                 return Ok(());
             }
             self.popup = Popup::None;

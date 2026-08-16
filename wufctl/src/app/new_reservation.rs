@@ -21,8 +21,7 @@ impl App {
     ) -> Result<()> {
         if key_event.code == KeyCode::Esc {
             // Block navigating away while AddRequest is pending, or success would stomp it.
-            if self.pending.is_some() {
-                self.show_toast(Err("Still working - hang on...".to_string()));
+            if self.reject_if_busy() {
                 return Ok(());
             }
             // Back one step, to the picker, not all the way to Reservations.
@@ -43,7 +42,9 @@ impl App {
             KeyCode::Left => self.adjust_new_reservation_field(false),
             KeyCode::Right => self.adjust_new_reservation_field(true),
             KeyCode::Enter if self.new_reservation.focus == FormRow::Create => {
-                self.trigger_submit_new_reservation(image_idx);
+                if !self.reject_if_busy() {
+                    self.trigger_submit_new_reservation(image_idx);
+                }
             }
             KeyCode::Char(c)
                 if self.new_reservation.focus == FormRow::CustomMinutes && c.is_ascii_digit() =>

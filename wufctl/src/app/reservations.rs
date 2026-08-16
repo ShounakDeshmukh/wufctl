@@ -97,6 +97,9 @@ impl App {
         }
 
         if key_event.code == KeyCode::Char('r') {
+            if self.reject_if_busy() {
+                return Ok(());
+            }
             if self.reservations_poll_due() {
                 self.trigger_load_reservations();
             } else {
@@ -156,6 +159,9 @@ impl App {
                 self.extend = ExtendFormState::default();
             }
             KeyCode::Char('c') if status == "ready" => {
+                if self.reject_if_busy() {
+                    return Ok(());
+                }
                 let id = self.reservations.reservations[i].id;
                 let image_name = self.reservations.reservations[i].image_name.clone();
                 self.popup = Popup::Connect { id };
@@ -180,6 +186,9 @@ impl App {
             return Ok(());
         }
         if key_event.code == KeyCode::Enter {
+            if self.reject_if_busy() {
+                return Ok(());
+            }
             self.popup = Popup::None;
             self.trigger_end_reservation(index);
         }
