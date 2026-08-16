@@ -34,7 +34,24 @@ encrypted at rest rather than sitting in a plaintext file. If no secret store is
 macOS, or `%APPDATA%\wufctl\config.toml` on Windows, written `0600` on Unix so nothing else on
 the machine can read it.
 
-## Building and running
+## Installing
+
+Prebuilt binaries for Linux, macOS, and Windows are on the
+[Releases page](https://github.com/ShounakDeshmukh/wufctl/releases).
+
+macOS/Linux:
+
+```sh
+curl --proto '=https' --tlsv1.2 -LsSf https://github.com/ShounakDeshmukh/wufctl/releases/latest/download/wufctl-installer.sh | sh
+```
+
+Windows (PowerShell):
+
+```powershell
+powershell -ExecutionPolicy Bypass -c "irm https://github.com/ShounakDeshmukh/wufctl/releases/latest/download/wufctl-installer.ps1 | iex"
+```
+
+## Building from source
 
 ```sh
 cargo build --release -p wufctl
