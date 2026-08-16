@@ -18,14 +18,13 @@ impl Image {
 #[derive(Debug, Clone)]
 pub struct RequestStatus {
     pub status: String,
-    pub time: Option<i64>,
 }
 
 /// Shared success/error envelope
 #[derive(Debug, Clone)]
 pub enum ActionResult {
     Success { requestid: Option<i64> },
-    Error { errorcode: i64, errormsg: String },
+    Error { errormsg: String },
 }
 
 /// One `requests[]` element from `get_request_ids()`

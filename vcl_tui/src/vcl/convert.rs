@@ -57,10 +57,6 @@ impl TryFrom<&Value> for RequestStatus {
     fn try_from(v: &Value) -> Result<Self> {
         Ok(RequestStatus {
             status: field_str(v, "status")?,
-            time: field(v, "time")
-                .ok()
-                .map(|t| coerce_i64(t, "time"))
-                .transpose()?,
         })
     }
 }
@@ -78,7 +74,6 @@ impl TryFrom<&Value> for ActionResult {
             })
         } else {
             Ok(ActionResult::Error {
-                errorcode: coerce_i64(field(v, "errorcode")?, "errorcode")?,
                 errormsg: field_str(v, "errormsg")?,
             })
         }
@@ -192,22 +187,11 @@ mod tests {
     }
 
     #[test]
-    fn request_status_loading_has_time() {
+    fn request_status_parses() {
         let mut map = HashMap::new();
         map.insert("status".to_string(), Value::String("loading".to_string()));
-        map.insert("time".to_string(), Value::Int(1));
         let status = RequestStatus::try_from(&Value::Struct(map)).unwrap();
         assert_eq!(status.status, "loading");
-        assert_eq!(status.time, Some(1));
-    }
-
-    #[test]
-    fn request_status_ready_has_no_time() {
-        let mut map = HashMap::new();
-        map.insert("status".to_string(), Value::String("ready".to_string()));
-        let status = RequestStatus::try_from(&Value::Struct(map)).unwrap();
-        assert_eq!(status.status, "ready");
-        assert_eq!(status.time, None);
     }
 
     #[test]
@@ -238,18 +222,13 @@ mod tests {
     fn action_result_error() {
         let mut map = HashMap::new();
         map.insert("status".to_string(), Value::String("error".to_string()));
-        map.insert("errorcode".to_string(), Value::Int(24));
         map.insert(
             "errormsg".to_string(),
             Value::String("reservation length exceeds max".to_string()),
         );
         match ActionResult::try_from(&Value::Struct(map)).unwrap() {
             ActionResult::Success { .. } => panic!("expected Error"),
-            ActionResult::Error {
-                errorcode,
-                errormsg,
-            } => {
-                assert_eq!(errorcode, 24);
+            ActionResult::Error { errormsg } => {
                 assert_eq!(errormsg, "reservation length exceeds max");
             }
         }
