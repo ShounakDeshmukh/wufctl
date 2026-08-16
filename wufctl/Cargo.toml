@@ -22,3 +22,4 @@ throbber-widgets-tui = "0.11.1"
 chrono-tz = "0.10.4"
 iana-time-zone = "0.1.65"
 keyring = "4.1.6"
+secrecy = { version = "0.10.3", features = ["serde"] }

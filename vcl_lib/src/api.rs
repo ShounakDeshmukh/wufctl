@@ -1,5 +1,6 @@
 use log::debug;
 use reqwest::Client;
+use secrecy::{ExposeSecret, SecretString};
 
 use crate::errors::{Result, VclError};
 use crate::params::{DeployServerOptions, UserGroupEdits, UserGroupMaxTimes};
@@ -8,7 +9,7 @@ use crate::xml_rpc::{build_request, parse_response};
 
 pub struct VclClient {
     endpoint: String,
-    token: String,
+    token: SecretString,
     http_client: Client,
 }
 
@@ -18,7 +19,7 @@ impl VclClient {
     /// # Arguments
     /// * `endpoint` - XML-RPC endpoint URL (typically `https://vcl.ncsu.edu/scheduling/index.php?mode=xmlrpccall`)
     /// * `token` - Bearer token for authentication
-    pub fn new(endpoint: impl Into<String>, token: impl Into<String>) -> Self {
+    pub fn new(endpoint: impl Into<String>, token: impl Into<SecretString>) -> Self {
         VclClient {
             endpoint: endpoint.into(),
             token: token.into(),
@@ -45,7 +46,7 @@ impl VclClient {
             ));
         }
 
-        if self.token.is_empty() {
+        if self.token.expose_secret().is_empty() {
             return Err(VclError::MissingToken);
         }
 
@@ -62,7 +63,10 @@ impl VclClient {
             .http_client
             .post(&self.endpoint)
             .header("Content-Type", "text/xml")
-            .header("X-Authorization", format!("Bearer {}", self.token))
+            .header(
+                "X-Authorization",
+                format!("Bearer {}", self.token.expose_secret()),
+            )
             .header("X-APIVERSION", "2")
             .timeout(std::time::Duration::from_secs(30))
             .body(body)
