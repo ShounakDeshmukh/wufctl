@@ -43,25 +43,6 @@ reservations. Connecting needs whatever client the method requires - `ssh` on yo
 SSH handoff (present by default on Linux/macOS, an optional Windows feature that's on by default
 on most modern installs), or an RDP client of your choice to open the saved `.rdp` file.
 
-## Using it
-
-Reservations is the home screen - everything else is a popup over it.
-
-| Key | Where | Does |
-|---|---|---|
-| `n` | Reservations | Open the image picker to start a new reservation |
-| `r` | Reservations | Refresh (debounced to once per 20s) |
-| `t` | Reservations | Change the saved API token |
-| `q` | Reservations | Quit |
-| `c` | Reservations, on a `ready` row | Open the Connect popup |
-| `e` | Reservations, on a `ready` row | Extend the reservation |
-| `x` | Reservations, any row but `loading` | End the reservation (asks for confirmation) |
-| `/` | Image picker | Search images by name |
-| `Enter` | Connect popup | Start the SSH session |
-| `r` | Connect popup, if xRDP is offered | Save a `.rdp` file to Downloads |
-| `Up`/`Down`, `Left`/`Right` | Forms | Move between fields, cycle a field's value |
-| `Esc` | Any popup | Back out |
-
 ## Layout
 
 The workspace has three crates:

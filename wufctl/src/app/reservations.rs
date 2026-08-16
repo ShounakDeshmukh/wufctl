@@ -6,9 +6,11 @@ use color_eyre::Result;
 use crossterm::event::{KeyCode, KeyEvent};
 
 use crate::state::{
-    App, ConnectUiState, ExtendFormState, PendingOp, Popup, Reservation, Screen, SetupUiState,
+    App, ConnectUiState, ExtendFormState, PendingOp, Popup, Reservation, Screen, SetupState,
+    SetupUiState,
 };
 use crate::vcl::{self, ActionResult};
+use vcl_lib::VclError;
 
 const RESERVATIONS_POLL_INTERVAL: Duration = Duration::from_secs(20);
 
@@ -76,6 +78,13 @@ impl App {
                     });
                 self.reservations.reservations = reservations;
                 self.reservations.error = None;
+            }
+            Err(err) if is_auth_error(&err) => {
+                self.screen = Screen::Setup;
+                self.setup = SetupUiState {
+                    state: SetupState::Error("Token rejected - sign in again.".to_string()),
+                    ..SetupUiState::default()
+                };
             }
             Err(err) => self.reservations.error = Some(format!("{err:#}")),
         }
@@ -213,5 +222,13 @@ impl App {
             Ok(ActionResult::Error { errormsg, .. }) => Err(errormsg),
             Err(err) => Err(format!("{err:#}")),
         });
+    }
+}
+
+/// Heuristic: VCL's Bearer-token auth rejects with an HTTP 401/403, not an XML-RPC fault.
+fn is_auth_error(err: &color_eyre::eyre::Report) -> bool {
+    match err.downcast_ref::<VclError>() {
+        Some(VclError::HttpError(msg)) => msg.contains("401") || msg.contains("403"),
+        _ => false,
     }
 }
