@@ -50,7 +50,7 @@ fn render_list(app: &mut App, frame: &mut Frame, area: Rect) {
     }
 
     let visible = app.images.visible_indices();
-    let title = if app.images.search.is_empty() {
+    let title = if app.images.search.value.is_empty() {
         "Images".to_string()
     } else {
         format!("Images ({}/{})", visible.len(), app.images.images.len())
@@ -75,12 +75,12 @@ fn render_list(app: &mut App, frame: &mut Frame, area: Rect) {
 
 fn render_search_line(app: &App, frame: &mut Frame, area: Rect) {
     if app.images.searching {
-        let text = format!("/{}", app.images.search);
+        let text = format!("/{}", app.images.search.value);
         frame.render_widget(Paragraph::new(text).style(theme::accent()), area);
-        frame.set_cursor_position((area.x + 1 + app.images.search_cursor as u16, area.y));
-    } else if !app.images.search.is_empty() {
+        frame.set_cursor_position((area.x + 1 + app.images.search.cursor as u16, area.y));
+    } else if !app.images.search.value.is_empty() {
         frame.render_widget(
-            Paragraph::new(format!("/{}", app.images.search)).style(theme::dim()),
+            Paragraph::new(format!("/{}", app.images.search.value)).style(theme::dim()),
             area,
         );
     } else {

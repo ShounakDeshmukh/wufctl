@@ -120,7 +120,6 @@ impl App {
             self.popup = Popup::ImagePicker;
             // Drop any stale search; the image list itself stays cached.
             self.images.search.clear();
-            self.images.search_cursor = 0;
             self.images.searching = false;
             return Ok(());
         }

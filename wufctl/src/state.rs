@@ -10,7 +10,53 @@ use tokio::runtime::Runtime;
 use vcl_lib::VclClient;
 
 use crate::config::Config;
+use crate::utils;
 use crate::vcl::{ActionResult, ConnectData, ConnectDataResult, Image, RequestStatus};
+
+/// Cursor-tracked single-line text input, shared by every free-text field in the UI.
+#[derive(Debug, Default, Clone)]
+pub struct TextInput {
+    pub value: String,
+    /// Char index (not byte index) of the insertion point within `value`.
+    pub cursor: usize,
+}
+
+impl TextInput {
+    pub fn insert(&mut self, c: char) {
+        let idx = utils::char_to_byte_index(&self.value, self.cursor);
+        self.value.insert(idx, c);
+        self.cursor += 1;
+    }
+
+    pub fn backspace(&mut self) {
+        if self.cursor > 0 {
+            let idx = utils::char_to_byte_index(&self.value, self.cursor - 1);
+            self.value.remove(idx);
+            self.cursor -= 1;
+        }
+    }
+
+    pub fn left(&mut self) {
+        self.cursor = self.cursor.saturating_sub(1);
+    }
+
+    pub fn right(&mut self) {
+        self.cursor = (self.cursor + 1).min(self.value.chars().count());
+    }
+
+    /// Strips control chars (e.g. a trailing newline from the clipboard).
+    pub fn paste(&mut self, text: &str) {
+        let clean: String = text.chars().filter(|c| !c.is_control()).collect();
+        let idx = utils::char_to_byte_index(&self.value, self.cursor);
+        self.value.insert_str(idx, &clean);
+        self.cursor += clean.chars().count();
+    }
+
+    pub fn clear(&mut self) {
+        self.value.clear();
+        self.cursor = 0;
+    }
+}
 
 /// Only two real screens Images/Connect are popups or redirects
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -50,9 +96,7 @@ pub enum SetupState {
 
 #[derive(Debug)]
 pub struct SetupUiState {
-    pub input: String,
-    /// Char index (not byte index) of the insertion point within `input`.
-    pub cursor: usize,
+    pub input: TextInput,
     pub masked: bool,
     pub state: SetupState,
 }
@@ -60,8 +104,7 @@ pub struct SetupUiState {
 impl Default for SetupUiState {
     fn default() -> Self {
         Self {
-            input: String::new(),
-            cursor: 0,
+            input: TextInput::default(),
             masked: true,
             state: SetupState::default(),
         }
@@ -81,9 +124,7 @@ pub struct ImagesUiState {
     /// Debounce for `n` browser opens.
     pub last_avd_open: Option<Instant>,
     /// `/` filter; `list_state` indexes `visible_indices()`.
-    pub search: String,
-    /// Cursor char index in `search`.
-    pub search_cursor: usize,
+    pub search: TextInput,
     /// True while editing `search`.
     pub searching: bool,
 }
@@ -91,10 +132,10 @@ pub struct ImagesUiState {
 impl ImagesUiState {
     /// Indices into `images` matching `search`, or all of them when it's empty.
     pub fn visible_indices(&self) -> Vec<usize> {
-        if self.search.is_empty() {
+        if self.search.value.is_empty() {
             return (0..self.images.len()).collect();
         }
-        let query = self.search.to_lowercase();
+        let query = self.search.value.to_lowercase();
         self.images
             .iter()
             .enumerate()
@@ -179,9 +220,7 @@ pub struct NewReservationFormState {
     pub am_pm: AmPm,
     /// Index into `DURATION_PRESETS`; `.len()` = "Custom".
     pub duration_idx: usize,
-    pub custom_minutes: String,
-    /// Char index of the cursor within `custom_minutes`.
-    pub custom_cursor: usize,
+    pub custom_minutes: TextInput,
     /// Last submit error.
     pub message: Option<String>,
 }
@@ -196,8 +235,7 @@ impl Default for NewReservationFormState {
             minute_idx: 0,
             am_pm: AmPm::Pm,
             duration_idx: 2, // 1 hr
-            custom_minutes: String::new(),
-            custom_cursor: 0,
+            custom_minutes: TextInput::default(),
             message: None,
         }
     }
@@ -221,6 +259,7 @@ impl NewReservationFormState {
     pub fn duration_minutes(&self) -> Option<i64> {
         if self.duration_idx == DURATION_PRESETS.len() {
             self.custom_minutes
+                .value
                 .trim()
                 .parse::<i64>()
                 .ok()

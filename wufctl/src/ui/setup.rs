@@ -90,9 +90,9 @@ pub fn render(app: &mut App, frame: &mut Frame) {
 
 fn render_input(app: &App, frame: &mut Frame, area: Rect) {
     let display = if app.setup.masked {
-        "\u{2022}".repeat(app.setup.input.chars().count())
+        "\u{2022}".repeat(app.setup.input.value.chars().count())
     } else {
-        app.setup.input.clone()
+        app.setup.input.value.clone()
     };
     let input_block = theme::block().border_style(theme::accent());
     let content_area = input_block.inner(area);
@@ -101,7 +101,7 @@ fn render_input(app: &App, frame: &mut Frame, area: Rect) {
     // Scroll window follows the cursor, not the string end, so it never overflows the border.
     let width = content_area.width as usize;
     let total = display.chars().count();
-    let cursor = app.setup.cursor.min(total);
+    let cursor = app.setup.input.cursor.min(total);
     let start = cursor.saturating_sub(width.saturating_sub(1));
     let visible: String = display.chars().skip(start).take(width).collect();
     let cursor_col = cursor - start;

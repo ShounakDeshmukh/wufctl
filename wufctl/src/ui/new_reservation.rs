@@ -90,7 +90,7 @@ pub fn render_popup(app: &mut App, frame: &mut Frame, image_idx: usize) {
         lines.push(Line::from(vec![
             Span::raw(prefix),
             Span::styled(
-                f.custom_minutes.clone(),
+                f.custom_minutes.value.clone(),
                 if focused {
                     theme::accent()
                 } else {
@@ -133,7 +133,7 @@ pub fn render_popup(app: &mut App, frame: &mut Frame, image_idx: usize) {
 
     if let Some((col, row)) = custom_minutes_cursor {
         frame.set_cursor_position((
-            inner.x + col as u16 + f.custom_cursor as u16,
+            inner.x + col as u16 + f.custom_minutes.cursor as u16,
             inner.y + row as u16,
         ));
     }

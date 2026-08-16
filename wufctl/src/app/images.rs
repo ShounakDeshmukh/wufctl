@@ -7,7 +7,6 @@ use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 use crate::connect_action::{self, AVD_GUIDE_URL};
 use crate::state::{App, PendingOp, Popup};
-use crate::utils;
 use crate::vcl::{self, Image};
 
 /// Session-scoped image cache
@@ -59,7 +58,7 @@ impl App {
 
         if key_event.code == KeyCode::Char('/') {
             self.images.searching = true;
-            self.images.search_cursor = self.images.search.chars().count();
+            self.images.search.cursor = self.images.search.value.chars().count();
             return Ok(());
         }
 
@@ -110,32 +109,19 @@ impl App {
             KeyCode::Esc => {
                 self.images.searching = false;
                 self.images.search.clear();
-                self.images.search_cursor = 0;
             }
             KeyCode::Left => {
-                self.images.search_cursor = self.images.search_cursor.saturating_sub(1);
+                self.images.search.left();
                 return Ok(());
             }
             KeyCode::Right => {
-                self.images.search_cursor =
-                    (self.images.search_cursor + 1).min(self.images.search.chars().count());
+                self.images.search.right();
                 return Ok(());
             }
             KeyCode::Char(c) if !key_event.modifiers.contains(KeyModifiers::CONTROL) => {
-                let idx = utils::char_to_byte_index(&self.images.search, self.images.search_cursor);
-                self.images.search.insert(idx, c);
-                self.images.search_cursor += 1;
+                self.images.search.insert(c);
             }
-            KeyCode::Backspace => {
-                if self.images.search_cursor > 0 {
-                    let idx = utils::char_to_byte_index(
-                        &self.images.search,
-                        self.images.search_cursor - 1,
-                    );
-                    self.images.search.remove(idx);
-                    self.images.search_cursor -= 1;
-                }
-            }
+            KeyCode::Backspace => self.images.search.backspace(),
             _ => return Ok(()),
         }
         // Query changed - reset selection to the top of the new filter.

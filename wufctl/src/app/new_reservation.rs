@@ -8,7 +8,6 @@ use crate::state::{
     AmPm, App, DURATION_PRESETS, FormRow, MINUTE_STEPS, NewReservationFormState, PendingOp, Popup,
     StartChoice,
 };
-use crate::utils;
 use crate::vcl::{self, ActionResult};
 
 use super::describe_rejected_connection;
@@ -49,23 +48,10 @@ impl App {
             KeyCode::Char(c)
                 if self.new_reservation.focus == FormRow::CustomMinutes && c.is_ascii_digit() =>
             {
-                let idx = utils::char_to_byte_index(
-                    &self.new_reservation.custom_minutes,
-                    self.new_reservation.custom_cursor,
-                );
-                self.new_reservation.custom_minutes.insert(idx, c);
-                self.new_reservation.custom_cursor += 1;
+                self.new_reservation.custom_minutes.insert(c);
             }
-            KeyCode::Backspace
-                if self.new_reservation.focus == FormRow::CustomMinutes
-                    && self.new_reservation.custom_cursor > 0 =>
-            {
-                let idx = utils::char_to_byte_index(
-                    &self.new_reservation.custom_minutes,
-                    self.new_reservation.custom_cursor - 1,
-                );
-                self.new_reservation.custom_minutes.remove(idx);
-                self.new_reservation.custom_cursor -= 1;
+            KeyCode::Backspace if self.new_reservation.focus == FormRow::CustomMinutes => {
+                self.new_reservation.custom_minutes.backspace();
             }
             _ => {}
         }
@@ -123,11 +109,11 @@ impl App {
                 };
             }
             FormRow::CustomMinutes => {
-                f.custom_cursor = if forward {
-                    (f.custom_cursor + 1).min(f.custom_minutes.chars().count())
+                if forward {
+                    f.custom_minutes.right();
                 } else {
-                    f.custom_cursor.saturating_sub(1)
-                };
+                    f.custom_minutes.left();
+                }
             }
             FormRow::Create => {}
         }

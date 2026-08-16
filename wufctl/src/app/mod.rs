@@ -18,8 +18,8 @@ use vcl_lib::{VclClient, VclError};
 
 use crate::config::Config;
 use crate::state::{
-    App, ConnectUiState, ExtendFormState, ImagesUiState, NewReservationFormState, PendingOp, Popup,
-    ReservationsUiState, Screen, SetupState, SetupUiState, Toast,
+    App, ConnectUiState, ExtendFormState, FormRow, ImagesUiState, NewReservationFormState,
+    PendingOp, Popup, ReservationsUiState, Screen, SetupState, SetupUiState, Toast,
 };
 use crate::ui;
 
@@ -73,6 +73,32 @@ impl App {
             true
         } else {
             false
+        }
+    }
+
+    /// Routes a bracketed-paste event to whichever text field is currently focused.
+    pub(super) fn handle_paste(&mut self, text: String) {
+        if self.screen == Screen::Setup {
+            if !matches!(self.setup.state, SetupState::Validating) {
+                self.setup.input.paste(&text);
+            }
+            return;
+        }
+        match self.popup {
+            Popup::ImagePicker if self.images.searching => {
+                self.images.search.paste(&text);
+                let visible = self.images.visible_indices();
+                self.images
+                    .list_state
+                    .select(if visible.is_empty() { None } else { Some(0) });
+            }
+            Popup::NewReservationForm { .. }
+                if self.new_reservation.focus == FormRow::CustomMinutes =>
+            {
+                let digits: String = text.chars().filter(char::is_ascii_digit).collect();
+                self.new_reservation.custom_minutes.paste(&digits);
+            }
+            _ => {}
         }
     }
 

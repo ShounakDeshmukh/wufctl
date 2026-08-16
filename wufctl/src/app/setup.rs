@@ -9,7 +9,6 @@ use vcl_lib::VclClient;
 
 use crate::config::Config;
 use crate::state::{App, PendingOp, Screen, SetupState, SetupUiState};
-use crate::utils;
 
 use super::VCL_ENDPOINT;
 
@@ -34,21 +33,11 @@ impl App {
 
         match key_event.code {
             KeyCode::Char(c) if !key_event.modifiers.contains(KeyModifiers::CONTROL) => {
-                let idx = utils::char_to_byte_index(&self.setup.input, self.setup.cursor);
-                self.setup.input.insert(idx, c);
-                self.setup.cursor += 1;
+                self.setup.input.insert(c);
             }
-            KeyCode::Backspace => {
-                if self.setup.cursor > 0 {
-                    let idx = utils::char_to_byte_index(&self.setup.input, self.setup.cursor - 1);
-                    self.setup.input.remove(idx);
-                    self.setup.cursor -= 1;
-                }
-            }
-            KeyCode::Left => self.setup.cursor = self.setup.cursor.saturating_sub(1),
-            KeyCode::Right => {
-                self.setup.cursor = (self.setup.cursor + 1).min(self.setup.input.chars().count())
-            }
+            KeyCode::Backspace => self.setup.input.backspace(),
+            KeyCode::Left => self.setup.input.left(),
+            KeyCode::Right => self.setup.input.right(),
             KeyCode::Enter if self.pending.is_none() => self.trigger_submit_token(),
             _ => {}
         }
@@ -56,19 +45,8 @@ impl App {
         Ok(())
     }
 
-    /// Strips control chars (e.g. a trailing newline from the clipboard).
-    pub(super) fn handle_paste(&mut self, text: String) {
-        if self.screen != Screen::Setup || matches!(self.setup.state, SetupState::Validating) {
-            return;
-        }
-        let clean: String = text.chars().filter(|c| !c.is_control()).collect();
-        let idx = utils::char_to_byte_index(&self.setup.input, self.setup.cursor);
-        self.setup.input.insert_str(idx, &clean);
-        self.setup.cursor += clean.chars().count();
-    }
-
     fn trigger_submit_token(&mut self) {
-        let token = self.setup.input.trim().to_string();
+        let token = self.setup.input.value.trim().to_string();
         if token.is_empty() {
             self.setup.state = SetupState::Error("Token can't be empty.".to_string());
             return;
