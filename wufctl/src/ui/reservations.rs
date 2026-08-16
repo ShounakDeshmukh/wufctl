@@ -5,6 +5,7 @@ use ratatui::{
     text::{Line, Span},
     widgets::{Clear, List, ListItem, Paragraph, Wrap},
 };
+use throbber_widgets_tui::Throbber;
 
 use crate::state::{App, PendingOp};
 use crate::theme;
@@ -70,14 +71,21 @@ fn render_list(app: &mut App, frame: &mut Frame, area: Rect) {
         .reservations
         .iter()
         .map(|r| {
-            ListItem::new(Line::from(vec![
-                Span::raw(r.image_name.clone()),
-                Span::raw(" "),
-                Span::styled(
-                    format!("[{}]", r.status.status),
-                    status_style(&r.status.status),
-                ),
-            ]))
+            let mut spans = vec![Span::raw(r.image_name.clone()), Span::raw(" ")];
+            // Animates while a refresh is in flight, sits on one frame between polls.
+            if r.status.status == "loading" {
+                spans.push(
+                    Throbber::default()
+                        .throbber_style(theme::pending())
+                        .to_symbol_span(&app.throbber_state),
+                );
+                spans.push(Span::raw(" "));
+            }
+            spans.push(Span::styled(
+                format!("[{}]", r.status.status),
+                status_style(&r.status.status),
+            ));
+            ListItem::new(Line::from(spans))
         })
         .collect();
     let list = List::new(items)
