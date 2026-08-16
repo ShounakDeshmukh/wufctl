@@ -48,7 +48,7 @@ on most modern installs), or an RDP client of your choice to open the saved `.rd
 
 ## Layout
 
-The workspace has three crates:
+The workspace has two crates:
 
 - `vcl_lib` - a thin XML-RPC client for the VCL API. It returns the raw response type and does no
   interpretation of its own; deserialization into typed structs lives in the consumer.
