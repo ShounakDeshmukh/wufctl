@@ -1,7 +1,7 @@
 
 [workspace]
 resolver = "2"
-members = ["vcl_lib", "wufctl", "vcl_probe"]
+members = ["vcl_lib", "wufctl"]
 
 [profile.release]
 opt-level = 3

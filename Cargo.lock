@@ -3571,15 +3571,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "vcl_probe"
-version = "0.1.0"
-dependencies = [
- "chrono",
- "tokio",
- "vcl_lib",
-]
-
-[[package]]
 name = "vcpkg"
 version = "0.2.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"

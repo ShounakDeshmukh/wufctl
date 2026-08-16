@@ -23,10 +23,4 @@ rustc-ice-*.txt
 #  option (not recommended) you can uncomment the following to ignore the entire idea folder.
 #.idea/
 .env
-.claude
 
-vcl_probe
-
-# Working/planning docs - local reference only, not meant for the repo
-*.md
-!README.md
