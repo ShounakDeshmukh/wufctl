@@ -70,18 +70,23 @@ impl VclClient {
             .await
             .map_err(|e| {
                 debug!("HTTP request error: {}", e);
-                VclError::HttpError(e.to_string())
+                if e.is_timeout() {
+                    VclError::Timeout
+                } else if e.is_connect() {
+                    VclError::ConnectionFailed(e.to_string())
+                } else {
+                    VclError::HttpError(e.to_string())
+                }
             })?;
 
         let status = response.status();
         if !status.is_success() {
             let text = response.text().await.unwrap_or_default();
             debug!("HTTP {} response body:\n{}", status, text);
-            return Err(VclError::HttpError(format!(
-                "HTTP {}: {}",
-                status,
-                text.chars().take(200).collect::<String>()
-            )));
+            return Err(VclError::NonSuccessStatus {
+                status: status.as_u16(),
+                body: text.chars().take(200).collect::<String>(),
+            });
         }
 
         let response_text = response

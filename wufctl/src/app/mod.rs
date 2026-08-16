@@ -217,10 +217,19 @@ impl App {
     }
 }
 
-/// The server just drops the connection on some rejections, so turn that into an actionable guess.
+/// The server just drops the connection on some rejections, so mid-request/status failures get the
+/// "rejected" framing; a timeout or failed connect is the client's network, not the server's call.
 fn describe_rejected_connection(err: &Report, hint: &str) -> String {
-    if let Some(VclError::HttpError(_)) = err.downcast_ref::<VclError>() {
-        return format!("Server rejected the request - {hint}");
+    match err.downcast_ref::<VclError>() {
+        Some(VclError::HttpError(_) | VclError::NonSuccessStatus { .. }) => {
+            format!("Server rejected the request - {hint}")
+        }
+        Some(VclError::Timeout) => {
+            "Request timed out - check your connection and try again.".to_string()
+        }
+        Some(VclError::ConnectionFailed(_)) => {
+            "Couldn't reach the VCL server - check your connection and try again.".to_string()
+        }
+        _ => format!("{err:#}"),
     }
-    format!("{err:#}")
 }
