@@ -4,6 +4,8 @@ mod images;
 mod new_reservation;
 mod reservations;
 mod setup;
+#[cfg(test)]
+mod tests;
 
 use std::sync::{Arc, mpsc};
 use std::time::{Duration, Instant};

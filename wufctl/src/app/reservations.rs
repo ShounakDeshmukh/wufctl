@@ -252,3 +252,6 @@ fn is_auth_error(err: &color_eyre::eyre::Report) -> bool {
         Some(VclError::ApiError { code: 3, .. })
     )
 }
+
+#[cfg(test)]
+mod tests;

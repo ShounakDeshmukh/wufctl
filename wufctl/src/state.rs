@@ -377,3 +377,6 @@ pub struct App {
     pub pending: Option<PendingOp>,
     pub throbber_state: ThrobberState,
 }
+
+#[cfg(test)]
+mod tests;
