@@ -34,8 +34,7 @@ impl Config {
         utils::get_config_dir()
     }
 
-    /// Tries the OS keyring first; falls back to the config file if no secret store is
-    /// available (e.g. headless Linux with no Secret Service running).
+    /// Tries the OS keyring first; falls back to the config file
     pub fn load() -> Result<Option<Config>> {
         if let Some(config) = Self::load_from_keyring() {
             return Ok(Some(config));
@@ -68,8 +67,7 @@ impl Config {
         Ok(Some(config))
     }
 
-    /// Tries the OS keyring first; falls back to the config file if no secret store is
-    /// available. A successful keyring save removes any leftover plaintext file.
+    /// A successful keyring save removes any leftover plaintext file.
     pub fn save(&self) -> Result<()> {
         if let Ok(entry) = Entry::new(KEYRING_SERVICE, KEYRING_USERNAME)
             && entry.set_password(&self.token).is_ok()
