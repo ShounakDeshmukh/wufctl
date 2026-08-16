@@ -275,7 +275,8 @@ New deps for this: `tracing`, `tracing-subscriber` (`fmt` feature is
 enough, `env-filter` optional), `tracing-appender` (non-blocking file
 writer), `tracing-log` (the `log` bridge). Log file location: reuse
 `dirs::config_dir()` (already resolved once for `config.rs`, see below) and
-put `vcl_tui.log` in the same `vcl_tui` subdirectory as `config.toml`,
+put a timestamped `vcl_tui-<YYYYMMDD-HHMMSS>.log` per run (not one file appended forever) in the
+same `vcl_tui` subdirectory as `config.toml`, pruning anything older than 5 days on startup,
 rather than resolving a second, different platform directory for it.
 `config_dir()` is guaranteed `Some` on Linux, macOS, and Windows alike
 (unlike `dirs::state_dir()`, which only exists on Linux and returns `None`
