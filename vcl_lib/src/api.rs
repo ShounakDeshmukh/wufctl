@@ -750,9 +750,9 @@ impl VclClient {
                 Value::String(new_affiliation.to_string()),
                 optional_string_arg(edits.owner),
                 optional_string_arg(edits.managing_group),
-                optional_string_arg(edits.initial_max_time),
-                optional_string_arg(edits.total_max_time),
-                optional_string_arg(edits.max_extend_time),
+                optional_int_string_arg(edits.initial_max_time),
+                optional_int_string_arg(edits.total_max_time),
+                optional_int_string_arg(edits.max_extend_time),
             ],
         )
         .await
@@ -784,6 +784,12 @@ fn require_non_empty(value: &str, field: &str) -> Result<()> {
 /// Encode an optional string arg as XML-RPC, using VCL's `''`-default convention.
 fn optional_string_arg(value: Option<&str>) -> Value {
     Value::String(value.unwrap_or("").to_string())
+}
+
+/// Encode an optional numeric field using VCL's `''`-default convention; the wire format for
+/// these fields is a string even though the value is numeric.
+fn optional_int_string_arg(value: Option<i64>) -> Value {
+    Value::String(value.map(|v| v.to_string()).unwrap_or_default())
 }
 
 /// Encode an optional string arg as XML-RPC, using VCL's `NULL`-default convention.

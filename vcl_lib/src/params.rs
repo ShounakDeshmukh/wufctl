@@ -28,9 +28,9 @@ pub struct UserGroupMaxTimes {
 pub struct UserGroupEdits<'a> {
     pub owner: Option<&'a str>,
     pub managing_group: Option<&'a str>,
-    pub initial_max_time: Option<&'a str>,
-    pub total_max_time: Option<&'a str>,
-    pub max_extend_time: Option<&'a str>,
+    pub initial_max_time: Option<i64>,
+    pub total_max_time: Option<i64>,
+    pub max_extend_time: Option<i64>,
 }
 
 #[cfg(test)]
