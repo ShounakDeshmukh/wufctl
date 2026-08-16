@@ -27,8 +27,14 @@ pub fn draw(app: &mut App, frame: &mut Frame) {
     {
         app.toast = None;
     }
-    // Advances one frame per draw, so it keeps spinning while the background call blocks.
-    if app.pending.is_some() {
+    // Advances one frame per draw (the event loop redraws every ~250ms regardless), so it keeps
+    // spinning both while a call blocks and while a reservation sits "loading" between polls.
+    let has_loading_reservation = app
+        .reservations
+        .reservations
+        .iter()
+        .any(|r| r.status.status == "loading");
+    if app.pending.is_some() || has_loading_reservation {
         app.throbber_state.calc_next();
     }
 
