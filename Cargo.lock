@@ -3030,29 +3030,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "vcl_tui"
-version = "0.1.0"
-dependencies = [
- "arboard",
- "chrono",
- "chrono-tz",
- "color-eyre",
- "crossterm 0.29.0",
- "dirs",
- "iana-time-zone",
- "ratatui",
- "serde",
- "throbber-widgets-tui",
- "tokio",
- "toml",
- "tracing",
- "tracing-appender",
- "tracing-error",
- "tracing-subscriber",
- "vcl_lib",
-]
-
-[[package]]
 name = "vcpkg"
 version = "0.2.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3632,6 +3609,29 @@ name = "writeable"
 version = "0.6.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1ffae5123b2d3fc086436f8834ae3ab053a283cfac8fe0a0b8eaae044768a4c4"
+
+[[package]]
+name = "wufctl"
+version = "0.1.0"
+dependencies = [
+ "arboard",
+ "chrono",
+ "chrono-tz",
+ "color-eyre",
+ "crossterm 0.29.0",
+ "dirs",
+ "iana-time-zone",
+ "ratatui",
+ "serde",
+ "throbber-widgets-tui",
+ "tokio",
+ "toml",
+ "tracing",
+ "tracing-appender",
+ "tracing-error",
+ "tracing-subscriber",
+ "vcl_lib",
+]
 
 [[package]]
 name = "x11rb"

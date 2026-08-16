@@ -126,7 +126,7 @@ pub fn render_top_bar(app: &App, frame: &mut Frame, area: Rect) {
         ("\u{25cb}", theme::dim(), "NOT SIGNED IN")
     };
     let left = Line::from(vec![
-        Span::styled("VCL_TUI", theme::accent().add_modifier(Modifier::BOLD)),
+        Span::styled("WUFCTL", theme::accent().add_modifier(Modifier::BOLD)),
         Span::styled("  NCSU VCL", theme::dim()),
     ]);
     let right = Line::from(vec![

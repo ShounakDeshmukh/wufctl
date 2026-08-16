@@ -1,4 +1,4 @@
-# vcl_tui
+# wufctl
 
 A terminal UI for [NCSU's VCL](https://vcl.ncsu.edu) (Virtual Computing Lab), for people who'd
 rather manage a reservation from a terminal than click through the web dashboard every time.
@@ -9,16 +9,13 @@ same XML-RPC API the web UI uses, over your own account token.
 ## What it does
 
 - Browse available images and start a reservation without leaving the terminal.
-- Watch a reservation go from `loading` to `ready`, polling automatically every 20 seconds so you
-  don't have to keep refreshing a browser tab.
-- Extend or end a reservation from the same screen you're already looking at.
+- Extend or end a reservation
 - Connect once it's ready: either an SSH handoff that suspends the TUI and hands your terminal
   straight to a real `ssh` process, or an xRDP `.rdp` file saved to your Downloads folder for
   images that support it.
 
 It intentionally doesn't do everything the web UI does. Windows/AVD images aren't reservable
-through this tool (the API doesn't support that class of request the same way), and there's no
-account management here - just images, reservations, and connecting to them.
+through this tool
 
 ## Setup
 
@@ -28,17 +25,17 @@ You'll need a VCL API token:
 2. Manage -> User Preferences -> Manage Tokens
 3. Generate a new token
 
-The first time you run `vcl_tui` it'll ask for that token and validate it against the server
-before saving it locally - `~/.config/vcl_tui/config.toml` on Linux, `~/Library/Application
-Support/vcl_tui/config.toml` on macOS, `%APPDATA%\vcl_tui\config.toml` on Windows, resolved via
+The first time you run `wufctl` it'll ask for that token and validate it against the server
+before saving it locally - `~/.config/wufctl/config.toml` on Linux, `~/Library/Application
+Support/wufctl/config.toml` on macOS, `%APPDATA%\wufctl\config.toml` on Windows, resolved via
 the OS's own config directory convention rather than hardcoded. The file is written `0600` on
 Unix so nothing else on the machine can read it.
 
 ## Building and running
 
 ```sh
-cargo build --release -p vcl_tui
-cargo run -p vcl_tui
+cargo build --release -p wufctl
+cargo run -p wufctl
 ```
 
 Requires a stable Rust toolchain. Nothing else needs to be installed to browse images or manage
@@ -70,6 +67,4 @@ The workspace has three crates:
 
 - `vcl_lib` - a thin XML-RPC client for the VCL API. It returns the raw response type and does no
   interpretation of its own; deserialization into typed structs lives in the consumer.
-- `vcl_tui` - this TUI, built on `ratatui`.
-- `vcl_probe` - a local-only scratch binary for poking at live API responses during development.
-  It's gitignored; it isn't part of what gets shipped or shared.
+- `wufctl` - this TUI, built on `ratatui`.

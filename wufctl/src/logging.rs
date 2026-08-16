@@ -18,13 +18,13 @@ pub fn init() -> WorkerGuard {
     fs::create_dir_all(&logdir).expect("Failed to create log directory");
     clean_old_logs(&logdir);
 
-    let filename = format!("vcl_tui-{}.log", Local::now().format("%Y%m%d-%H%M%S"));
+    let filename = format!("wufctl-{}.log", Local::now().format("%Y%m%d-%H%M%S"));
     let file_appender = rolling::never(&logdir, filename);
     let (non_blocking, guard) = tracing_appender::non_blocking(file_appender);
 
     // RUST_LOG wins if set; otherwise "warn" for dependencies, full debug for our own code.
     let filter = EnvFilter::try_from_default_env()
-        .unwrap_or_else(|_| EnvFilter::new("warn,vcl_tui=debug,vcl_lib=debug"));
+        .unwrap_or_else(|_| EnvFilter::new("warn,wufctl=debug,vcl_lib=debug"));
 
     // color-eyre needs a Registry with an ErrorLayer to capture a SpanTrace, not a bare fmt::Subscriber.
     tracing_subscriber::registry()

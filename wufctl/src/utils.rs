@@ -4,7 +4,7 @@ use chrono::{TimeZone, Utc};
 use chrono_tz::Tz;
 
 pub fn get_config_dir() -> Option<PathBuf> {
-    dirs::config_dir().map(|p| p.join("vcl_tui"))
+    dirs::config_dir().map(|p| p.join("wufctl"))
 }
 
 /// `chrono::Local` can't resolve a named zone like "EDT" on its own, so look up the system's

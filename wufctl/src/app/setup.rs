@@ -80,7 +80,7 @@ impl App {
         thread::spawn(move || {
             let client = VclClient::new(VCL_ENDPOINT, client_token);
             let result = rt
-                .block_on(client.test("vcl_tui"))
+                .block_on(client.test("wufctl"))
                 .map(|_| client)
                 .map_err(Report::from);
             let _ = tx.send(result);

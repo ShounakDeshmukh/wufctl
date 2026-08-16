@@ -1,4 +1,4 @@
 
 [workspace]
 resolver = "2"
-members = ["vcl_lib", "vcl_tui", "vcl_probe"]
+members = ["vcl_lib", "wufctl", "vcl_probe"]

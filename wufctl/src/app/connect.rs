@@ -40,7 +40,7 @@ impl App {
             match connect_action::connect_ssh(&data.user, &data.server_ip, &data.connect_port) {
                 Ok(_status) => {
                     self.popup = Popup::None;
-                    self.show_toast(Ok("vcl_tui resumed - ssh session ended.".to_string()));
+                    self.show_toast(Ok("wufctl resumed - ssh session ended.".to_string()));
                 }
                 Err(err) => {
                     self.connect.error = Some(connect_action::describe_ssh_error(&err));
