@@ -5,6 +5,8 @@ pub mod new_reservation;
 pub mod reservations;
 pub mod setup;
 
+use std::time::Instant;
+
 use ratatui::{
     Frame,
     layout::{Constraint, Layout, Rect},
@@ -12,6 +14,7 @@ use ratatui::{
     text::{Line, Span},
     widgets::{Block, Borders, Clear, Paragraph},
 };
+use throbber_widgets_tui::Throbber;
 
 use crate::state::{App, Popup, Screen};
 use crate::theme;
@@ -20,7 +23,7 @@ pub fn draw(app: &mut App, frame: &mut Frame) {
     if app
         .toast
         .as_ref()
-        .is_some_and(|t| std::time::Instant::now() >= t.expires_at)
+        .is_some_and(|t| Instant::now() >= t.expires_at)
     {
         app.toast = None;
     }
@@ -76,7 +79,7 @@ pub fn render_throbber(app: &mut App, frame: &mut Frame, area: Rect, label: &'st
         width: text_width,
         height: 1.min(area.height),
     };
-    let throbber = throbber_widgets_tui::Throbber::default()
+    let throbber = Throbber::default()
         .label(label)
         .throbber_style(theme::info());
     frame.render_stateful_widget(throbber, row, &mut app.throbber_state);

@@ -8,6 +8,7 @@ use ratatui::{
 
 use crate::state::{App, PendingOp};
 use crate::theme;
+use crate::utils;
 
 pub fn render(app: &mut App, frame: &mut Frame) {
     let [top_bar_area, pane_area] =
@@ -110,11 +111,8 @@ fn render_details(app: &mut App, frame: &mut Frame, area: Rect) {
             Span::raw("Status: "),
             Span::styled(&r.status.status, status_style(&r.status.status)),
         ]),
-        Line::from(format!(
-            "Starting: {}",
-            crate::utils::format_timestamp(r.start)
-        )),
-        Line::from(format!("Ending: {}", crate::utils::format_timestamp(r.end))),
+        Line::from(format!("Starting: {}", utils::format_timestamp(r.start))),
+        Line::from(format!("Ending: {}", utils::format_timestamp(r.end))),
     ];
 
     lines.push(Line::from(""));

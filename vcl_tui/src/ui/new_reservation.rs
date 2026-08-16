@@ -1,3 +1,4 @@
+use chrono::{Days, Local};
 use ratatui::{
     Frame,
     style::{Modifier, Style},
@@ -140,7 +141,7 @@ pub fn render_popup(app: &mut App, frame: &mut Frame, image_idx: usize) {
 
 /// Returns a string like "Mon Jan 1"
 fn day_label(offset: u8) -> String {
-    let date = chrono::Local::now().date_naive() + chrono::Days::new(offset as u64);
+    let date = Local::now().date_naive() + Days::new(offset as u64);
     let formatted = date.format("%a %b %-d").to_string();
     if offset == 0 {
         format!("{formatted} (Today)")

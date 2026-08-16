@@ -1,4 +1,4 @@
-use color_eyre::eyre::{ContextCompat, Result, eyre};
+use color_eyre::eyre::{ContextCompat, Report, Result, eyre};
 use vcl_lib::Value;
 
 use super::model::{
@@ -38,7 +38,7 @@ fn field_str_array(v: &Value, key: &str) -> Result<Vec<String>> {
 }
 
 impl TryFrom<&Value> for Image {
-    type Error = color_eyre::eyre::Report;
+    type Error = Report;
 
     fn try_from(v: &Value) -> Result<Self> {
         Ok(Image {
@@ -52,7 +52,7 @@ impl TryFrom<&Value> for Image {
 }
 
 impl TryFrom<&Value> for RequestStatus {
-    type Error = color_eyre::eyre::Report;
+    type Error = Report;
 
     fn try_from(v: &Value) -> Result<Self> {
         Ok(RequestStatus {
@@ -66,7 +66,7 @@ impl TryFrom<&Value> for RequestStatus {
 }
 
 impl TryFrom<&Value> for ActionResult {
-    type Error = color_eyre::eyre::Report;
+    type Error = Report;
 
     fn try_from(v: &Value) -> Result<Self> {
         if field_str(v, "status")? == "success" {
@@ -86,7 +86,7 @@ impl TryFrom<&Value> for ActionResult {
 }
 
 impl TryFrom<&Value> for RequestListEntry {
-    type Error = color_eyre::eyre::Report;
+    type Error = Report;
 
     fn try_from(v: &Value) -> Result<Self> {
         Ok(RequestListEntry {
@@ -107,7 +107,7 @@ fn connect_method(id: &str, v: &Value) -> Result<ConnectMethod> {
 }
 
 impl TryFrom<&Value> for ConnectDataResult {
-    type Error = color_eyre::eyre::Report;
+    type Error = Report;
 
     fn try_from(v: &Value) -> Result<Self> {
         if field_str(v, "status")? == "notready" {

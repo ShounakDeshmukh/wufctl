@@ -1,13 +1,25 @@
-use crate::config::Config;
-use crate::state::{
-    App, ConnectUiState, DURATION_PRESETS, EXTEND_PRESETS, ExtendFormState, ExtendRow, FormRow,
-    ImagesUiState, NewReservationFormState, PendingOp, Popup, Reservation, ReservationsUiState,
-    Screen, SetupState, SetupUiState, Toast,
-};
-use crossterm::event::{self, Event, KeyCode, KeyEventKind, KeyModifiers};
+use arboard::Clipboard;
+use color_eyre::Result;
+use color_eyre::eyre::Report;
+use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 use ratatui::DefaultTerminal;
 use std::sync::{Arc, mpsc};
+use std::thread;
 use std::time::{Duration, Instant};
+use throbber_widgets_tui::ThrobberState;
+use tokio::runtime::Builder;
+use vcl_lib::{VclClient, VclError};
+
+use crate::config::Config;
+use crate::connect_action::{self, AVD_GUIDE_URL};
+use crate::state::{
+    AmPm, App, ConnectUiState, DURATION_PRESETS, EXTEND_PRESETS, ExtendFormState, ExtendRow,
+    FormRow, ImagesUiState, MINUTE_STEPS, NewReservationFormState, PendingOp, Popup, Reservation,
+    ReservationsUiState, Screen, SetupState, SetupUiState, StartChoice, Toast,
+};
+use crate::ui;
+use crate::utils;
+use crate::vcl::{self, ActionResult, ConnectDataResult, Image};
 const VCL_ENDPOINT: &str = "https://vcl.ncsu.edu/scheduling/index.php?mode=xmlrpccall";
 const RESERVATIONS_POLL_INTERVAL: Duration = Duration::from_secs(20);
 /// So `run()`'s loop keeps checking the poll timer even without a keypress.
@@ -17,21 +29,16 @@ const TOAST_DURATION: Duration = Duration::from_secs(3);
 const IMAGES_CACHE_INTERVAL: Duration = Duration::from_secs(600);
 
 impl App {
-    pub fn new() -> color_eyre::Result<Self> {
+    pub fn new() -> Result<Self> {
         let config = Config::load()?;
         let screen = match &config {
             Some(_) => Screen::Reservations,
             None => Screen::Setup,
         };
-        let client = config.as_ref().map(|cfg| {
-            Arc::new(vcl_lib::VclClient::new(
-                VCL_ENDPOINT,
-                cfg.token().to_string(),
-            ))
-        });
-        let rt = tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .build()?;
+        let client = config
+            .as_ref()
+            .map(|cfg| Arc::new(VclClient::new(VCL_ENDPOINT, cfg.token().to_string())));
+        let rt = Builder::new_current_thread().enable_all().build()?;
         Ok(App {
             screen,
             popup: Popup::None,
@@ -47,7 +54,7 @@ impl App {
             connect: ConnectUiState::default(),
             toast: None,
             pending: None,
-            throbber_state: throbber_widgets_tui::ThrobberState::default(),
+            throbber_state: ThrobberState::default(),
         })
     }
 
@@ -58,7 +65,7 @@ impl App {
         });
     }
 
-    pub fn run(&mut self, terminal: &mut DefaultTerminal) -> color_eyre::Result<()> {
+    pub fn run(&mut self, terminal: &mut DefaultTerminal) -> Result<()> {
         while !self.exit {
             self.poll_pending();
             // Only one background call in flight at a time.
@@ -70,7 +77,7 @@ impl App {
                     self.trigger_load_reservations();
                 }
             }
-            terminal.draw(|f| crate::ui::draw(self, f))?;
+            terminal.draw(|f| ui::draw(self, f))?;
             self.handle_events()?;
         }
         Ok(())
@@ -161,14 +168,14 @@ impl App {
         };
         let rt = Arc::clone(&self.async_runtime);
         let (tx, rx) = mpsc::channel();
-        std::thread::spawn(move || {
-            let result = rt.block_on(crate::vcl::get_images(&client));
+        thread::spawn(move || {
+            let result = rt.block_on(vcl::get_images(&client));
             let _ = tx.send(result);
         });
         self.pending = Some(PendingOp::LoadImages(rx));
     }
 
-    fn apply_load_images(&mut self, result: color_eyre::Result<Vec<crate::vcl::Image>>) {
+    fn apply_load_images(&mut self, result: Result<Vec<Image>>) {
         match result {
             Ok(images) => {
                 self.images
@@ -210,12 +217,12 @@ impl App {
         };
         let rt = Arc::clone(&self.async_runtime);
         let (tx, rx) = mpsc::channel();
-        std::thread::spawn(move || {
+        thread::spawn(move || {
             let result = rt.block_on(async {
-                let entries = crate::vcl::get_request_ids(&client).await?;
+                let entries = vcl::get_request_ids(&client).await?;
                 let mut reservations = Vec::with_capacity(entries.len());
                 for entry in entries {
-                    let status = crate::vcl::get_request_status(&client, entry.requestid).await?;
+                    let status = vcl::get_request_status(&client, entry.requestid).await?;
                     reservations.push(Reservation {
                         id: entry.requestid,
                         image_name: entry.imagename,
@@ -231,7 +238,7 @@ impl App {
         self.pending = Some(PendingOp::LoadReservations(rx));
     }
 
-    fn apply_load_reservations(&mut self, result: color_eyre::Result<Vec<Reservation>>) {
+    fn apply_load_reservations(&mut self, result: Result<Vec<Reservation>>) {
         match result {
             Ok(reservations) => {
                 // Preserve the selection across a refresh instead of jumping to the top.
@@ -251,7 +258,7 @@ impl App {
     }
 
     /// Times out instead of blocking forever, so `run()`'s loop keeps checking timers.
-    pub fn handle_events(&mut self) -> color_eyre::Result<()> {
+    pub fn handle_events(&mut self) -> Result<()> {
         if !event::poll(EVENT_POLL_RATE)? {
             return Ok(());
         }
@@ -272,15 +279,12 @@ impl App {
             return;
         }
         let clean: String = text.chars().filter(|c| !c.is_control()).collect();
-        let idx = crate::utils::char_to_byte_index(&self.setup.input, self.setup.cursor);
+        let idx = utils::char_to_byte_index(&self.setup.input, self.setup.cursor);
         self.setup.input.insert_str(idx, &clean);
         self.setup.cursor += clean.chars().count();
     }
 
-    pub fn handle_key_event(
-        &mut self,
-        key_event: crossterm::event::KeyEvent,
-    ) -> color_eyre::Result<()> {
+    pub fn handle_key_event(&mut self, key_event: KeyEvent) -> Result<()> {
         if key_event.modifiers.contains(KeyModifiers::CONTROL)
             && key_event.code == KeyCode::Char('c')
         {
@@ -307,10 +311,7 @@ impl App {
         Ok(())
     }
 
-    fn handle_reservations_key(
-        &mut self,
-        key_event: crossterm::event::KeyEvent,
-    ) -> color_eyre::Result<()> {
+    fn handle_reservations_key(&mut self, key_event: KeyEvent) -> Result<()> {
         if key_event.code == KeyCode::Char('q') {
             self.exit = true;
             return Ok(());
@@ -393,21 +394,16 @@ impl App {
         let id = self.reservations.reservations[index].id;
         let rt = Arc::clone(&self.async_runtime);
         let (tx, rx) = mpsc::channel();
-        std::thread::spawn(move || {
-            let result = rt.block_on(crate::vcl::end_request(&client, id));
+        thread::spawn(move || {
+            let result = rt.block_on(vcl::end_request(&client, id));
             let _ = tx.send(result);
         });
         self.pending = Some(PendingOp::EndReservation { id, index, rx });
     }
 
-    fn apply_end_reservation(
-        &mut self,
-        id: i64,
-        index: usize,
-        result: color_eyre::Result<crate::vcl::ActionResult>,
-    ) {
+    fn apply_end_reservation(&mut self, id: i64, index: usize, result: Result<ActionResult>) {
         self.reservations.message = Some(match result {
-            Ok(crate::vcl::ActionResult::Success { .. }) => {
+            Ok(ActionResult::Success { .. }) => {
                 self.reservations.reservations.remove(index);
                 self.reservations
                     .list_state
@@ -418,16 +414,12 @@ impl App {
                     });
                 Ok(format!("Reservation #{id} ended."))
             }
-            Ok(crate::vcl::ActionResult::Error { errormsg, .. }) => Err(errormsg),
+            Ok(ActionResult::Error { errormsg, .. }) => Err(errormsg),
             Err(err) => Err(format!("{err:#}")),
         });
     }
 
-    fn handle_extend_key(
-        &mut self,
-        key_event: crossterm::event::KeyEvent,
-        id: i64,
-    ) -> color_eyre::Result<()> {
+    fn handle_extend_key(&mut self, key_event: KeyEvent, id: i64) -> Result<()> {
         if key_event.code == KeyCode::Esc {
             // Block navigating away mid-submit, same as the New Reservation form's Esc guard.
             if self.pending.is_some() {
@@ -452,10 +444,7 @@ impl App {
         Ok(())
     }
 
-    fn handle_connect_key(
-        &mut self,
-        key_event: crossterm::event::KeyEvent,
-    ) -> color_eyre::Result<()> {
+    fn handle_connect_key(&mut self, key_event: KeyEvent) -> Result<()> {
         if key_event.code == KeyCode::Esc {
             if self.pending.is_some() {
                 self.show_toast(Err("Still working - hang on...".to_string()));
@@ -484,27 +473,23 @@ impl App {
         };
         let rt = Arc::clone(&self.async_runtime);
         let (tx, rx) = mpsc::channel();
-        std::thread::spawn(move || {
-            let result = rt.block_on(crate::vcl::extend_request(&client, id, minutes));
+        thread::spawn(move || {
+            let result = rt.block_on(vcl::extend_request(&client, id, minutes));
             let _ = tx.send(result);
         });
         self.pending = Some(PendingOp::ExtendRequest { id, rx });
     }
 
-    fn apply_extend_request(
-        &mut self,
-        id: i64,
-        result: color_eyre::Result<crate::vcl::ActionResult>,
-    ) {
+    fn apply_extend_request(&mut self, id: i64, result: Result<ActionResult>) {
         match result {
-            Ok(crate::vcl::ActionResult::Success { .. }) => {
+            Ok(ActionResult::Success { .. }) => {
                 self.popup = Popup::None;
                 self.extend = ExtendFormState::default();
                 // Server is the source of truth, so force a fresh fetch.
                 self.reservations.last_poll = None;
                 self.show_toast(Ok(format!("Reservation #{id} extended.")));
             }
-            Ok(crate::vcl::ActionResult::Error { errormsg, .. }) => {
+            Ok(ActionResult::Error { errormsg, .. }) => {
                 self.extend.message = Some(errormsg);
             }
             Err(err) => {
@@ -523,33 +508,27 @@ impl App {
         };
         let rt = Arc::clone(&self.async_runtime);
         let (tx, rx) = mpsc::channel();
-        std::thread::spawn(move || {
+        thread::spawn(move || {
             let result = rt.block_on(async {
-                let ip = crate::vcl::get_ip(&client).await?;
-                crate::vcl::get_request_connect_data(&client, id, &ip).await
+                let ip = vcl::get_ip(&client).await?;
+                vcl::get_request_connect_data(&client, id, &ip).await
             });
             let _ = tx.send(result);
         });
         self.pending = Some(PendingOp::LoadConnectData(rx));
     }
 
-    fn apply_load_connect_data(
-        &mut self,
-        result: color_eyre::Result<crate::vcl::ConnectDataResult>,
-    ) {
+    fn apply_load_connect_data(&mut self, result: Result<ConnectDataResult>) {
         match result {
-            Ok(crate::vcl::ConnectDataResult::Ready(data)) => self.connect.data = Some(data),
-            Ok(crate::vcl::ConnectDataResult::NotReady) => {
+            Ok(ConnectDataResult::Ready(data)) => self.connect.data = Some(data),
+            Ok(ConnectDataResult::NotReady) => {
                 self.connect.error = Some("Not ready yet - try again in a moment.".to_string());
             }
             Err(err) => self.connect.error = Some(format!("{err:#}")),
         }
     }
 
-    fn handle_image_picker_key(
-        &mut self,
-        key_event: crossterm::event::KeyEvent,
-    ) -> color_eyre::Result<()> {
+    fn handle_image_picker_key(&mut self, key_event: KeyEvent) -> Result<()> {
         if self.images.searching {
             return self.handle_image_search_key(key_event);
         }
@@ -603,10 +582,7 @@ impl App {
     }
 
     /// Vim/less-style `/` search: `Enter` keeps the filter, `Esc` clears it.
-    fn handle_image_search_key(
-        &mut self,
-        key_event: crossterm::event::KeyEvent,
-    ) -> color_eyre::Result<()> {
+    fn handle_image_search_key(&mut self, key_event: KeyEvent) -> Result<()> {
         match key_event.code {
             KeyCode::Enter => {
                 self.images.searching = false;
@@ -627,16 +603,13 @@ impl App {
                 return Ok(());
             }
             KeyCode::Char(c) if !key_event.modifiers.contains(KeyModifiers::CONTROL) => {
-                let idx = crate::utils::char_to_byte_index(
-                    &self.images.search,
-                    self.images.search_cursor,
-                );
+                let idx = utils::char_to_byte_index(&self.images.search, self.images.search_cursor);
                 self.images.search.insert(idx, c);
                 self.images.search_cursor += 1;
             }
             KeyCode::Backspace => {
                 if self.images.search_cursor > 0 {
-                    let idx = crate::utils::char_to_byte_index(
+                    let idx = utils::char_to_byte_index(
                         &self.images.search,
                         self.images.search_cursor - 1,
                     );
@@ -654,11 +627,7 @@ impl App {
         Ok(())
     }
 
-    fn handle_new_reservation_key(
-        &mut self,
-        key_event: crossterm::event::KeyEvent,
-        image_idx: usize,
-    ) -> color_eyre::Result<()> {
+    fn handle_new_reservation_key(&mut self, key_event: KeyEvent, image_idx: usize) -> Result<()> {
         if key_event.code == KeyCode::Esc {
             // Block navigating away while AddRequest is pending, or success would stomp it.
             if self.pending.is_some() {
@@ -688,7 +657,7 @@ impl App {
             KeyCode::Char(c)
                 if self.new_reservation.focus == FormRow::CustomMinutes && c.is_ascii_digit() =>
             {
-                let idx = crate::utils::char_to_byte_index(
+                let idx = utils::char_to_byte_index(
                     &self.new_reservation.custom_minutes,
                     self.new_reservation.custom_cursor,
                 );
@@ -699,7 +668,7 @@ impl App {
                 if self.new_reservation.focus == FormRow::CustomMinutes
                     && self.new_reservation.custom_cursor > 0 =>
             {
-                let idx = crate::utils::char_to_byte_index(
+                let idx = utils::char_to_byte_index(
                     &self.new_reservation.custom_minutes,
                     self.new_reservation.custom_cursor - 1,
                 );
@@ -713,7 +682,6 @@ impl App {
 
     /// `Left`/`Right` cycles the focused row's value, except `CustomMinutes` moves the cursor.
     fn adjust_new_reservation_field(&mut self, forward: bool) {
-        use crate::state::{AmPm, StartChoice};
         let f = &mut self.new_reservation;
         match f.focus {
             FormRow::Start => {
@@ -740,7 +708,7 @@ impl App {
                 };
             }
             FormRow::Minute => {
-                let len = crate::state::MINUTE_STEPS.len() as u8;
+                let len = MINUTE_STEPS.len() as u8;
                 f.minute_idx = if forward {
                     (f.minute_idx + 1) % len
                 } else {
@@ -794,16 +762,16 @@ impl App {
         let image_id = image.id;
         let rt = Arc::clone(&self.async_runtime);
         let (tx, rx) = mpsc::channel();
-        std::thread::spawn(move || {
-            let result = rt.block_on(crate::vcl::add_request(&client, image_id, &start, length));
+        thread::spawn(move || {
+            let result = rt.block_on(vcl::add_request(&client, image_id, &start, length));
             let _ = tx.send(result);
         });
         self.pending = Some(PendingOp::AddRequest(rx));
     }
 
-    fn apply_add_request(&mut self, result: color_eyre::Result<crate::vcl::ActionResult>) {
+    fn apply_add_request(&mut self, result: Result<ActionResult>) {
         match result {
-            Ok(crate::vcl::ActionResult::Success { requestid }) => {
+            Ok(ActionResult::Success { requestid }) => {
                 self.popup = Popup::None;
                 self.new_reservation = NewReservationFormState::default();
                 // Server is the source of truth, so force a fresh fetch next poll.
@@ -814,7 +782,7 @@ impl App {
                 };
                 self.show_toast(Ok(message));
             }
-            Ok(crate::vcl::ActionResult::Error { errormsg, .. }) => {
+            Ok(ActionResult::Error { errormsg, .. }) => {
                 self.new_reservation.message = Some(errormsg);
             }
             Err(err) => {
@@ -829,7 +797,7 @@ impl App {
 
     /// Debounced so spamming `n` can't spawn a browser per keypress.
     fn open_avd_guide(&mut self) {
-        const COOLDOWN: std::time::Duration = std::time::Duration::from_secs(2);
+        const COOLDOWN: Duration = Duration::from_secs(2);
         if self
             .images
             .last_avd_open
@@ -837,19 +805,14 @@ impl App {
         {
             return;
         }
-        self.images.last_avd_open = Some(std::time::Instant::now());
-        self.images.message = Some(
-            match crate::connect_action::open_url(crate::connect_action::AVD_GUIDE_URL) {
-                Ok(()) => Ok("Opened AVD guide in your browser.".to_string()),
-                Err(err) => Err(format!("Couldn't open browser: {err}")),
-            },
-        );
+        self.images.last_avd_open = Some(Instant::now());
+        self.images.message = Some(match connect_action::open_url(AVD_GUIDE_URL) {
+            Ok(()) => Ok("Opened AVD guide in your browser.".to_string()),
+            Err(err) => Err(format!("Couldn't open browser: {err}")),
+        });
     }
 
-    pub fn handle_setup_key(
-        &mut self,
-        key_event: crossterm::event::KeyEvent,
-    ) -> color_eyre::Result<()> {
+    pub fn handle_setup_key(&mut self, key_event: KeyEvent) -> Result<()> {
         if key_event.modifiers.contains(KeyModifiers::CONTROL)
             && key_event.code == KeyCode::Char('r')
         {
@@ -861,7 +824,7 @@ impl App {
         if key_event.modifiers.contains(KeyModifiers::CONTROL)
             && key_event.code == KeyCode::Char('v')
         {
-            if let Ok(text) = arboard::Clipboard::new().and_then(|mut cb| cb.get_text()) {
+            if let Ok(text) = Clipboard::new().and_then(|mut cb| cb.get_text()) {
                 self.handle_paste(text);
             }
             return Ok(());
@@ -869,14 +832,13 @@ impl App {
 
         match key_event.code {
             KeyCode::Char(c) if !key_event.modifiers.contains(KeyModifiers::CONTROL) => {
-                let idx = crate::utils::char_to_byte_index(&self.setup.input, self.setup.cursor);
+                let idx = utils::char_to_byte_index(&self.setup.input, self.setup.cursor);
                 self.setup.input.insert(idx, c);
                 self.setup.cursor += 1;
             }
             KeyCode::Backspace => {
                 if self.setup.cursor > 0 {
-                    let idx =
-                        crate::utils::char_to_byte_index(&self.setup.input, self.setup.cursor - 1);
+                    let idx = utils::char_to_byte_index(&self.setup.input, self.setup.cursor - 1);
                     self.setup.input.remove(idx);
                     self.setup.cursor -= 1;
                 }
@@ -902,19 +864,19 @@ impl App {
         let rt = Arc::clone(&self.async_runtime);
         let (tx, rx) = mpsc::channel();
         let client_token = token.clone();
-        std::thread::spawn(move || {
-            let client = vcl_lib::VclClient::new(VCL_ENDPOINT, client_token);
+        thread::spawn(move || {
+            let client = VclClient::new(VCL_ENDPOINT, client_token);
             let result = rt
                 .block_on(client.test("vcl_tui"))
                 .map(|_| client)
-                .map_err(color_eyre::eyre::Report::from);
+                .map_err(Report::from);
             let _ = tx.send(result);
         });
         self.setup.state = SetupState::Validating;
         self.pending = Some(PendingOp::SetupTest { token, rx });
     }
 
-    fn apply_setup_test(&mut self, token: String, result: color_eyre::Result<vcl_lib::VclClient>) {
+    fn apply_setup_test(&mut self, token: String, result: Result<VclClient>) {
         match result {
             Ok(client) => {
                 let config = Config::new(token);
@@ -934,8 +896,8 @@ impl App {
 }
 
 /// The server just drops the connection on some rejections, so turn that into an actionable guess.
-fn describe_rejected_connection(err: &color_eyre::eyre::Report, hint: &str) -> String {
-    if let Some(vcl_lib::VclError::HttpError(_)) = err.downcast_ref::<vcl_lib::VclError>() {
+fn describe_rejected_connection(err: &Report, hint: &str) -> String {
+    if let Some(VclError::HttpError(_)) = err.downcast_ref::<VclError>() {
         return format!("Server rejected the request - {hint}");
     }
     format!("{err:#}")

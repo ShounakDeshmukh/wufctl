@@ -1,5 +1,8 @@
 use std::path::PathBuf;
 
+use chrono::{TimeZone, Utc};
+use chrono_tz::Tz;
+
 pub fn get_config_dir() -> Option<PathBuf> {
     dirs::config_dir().map(|p| p.join("vcl_tui"))
 }
@@ -7,14 +10,12 @@ pub fn get_config_dir() -> Option<PathBuf> {
 /// `chrono::Local` can't resolve a named zone like "EDT" on its own, so look up the system's
 /// IANA zone via `iana-time-zone` and format through `chrono-tz` instead.
 pub fn format_timestamp(unix_secs: i64) -> String {
-    use chrono::{TimeZone, Utc};
-
     let Some(dt) = Utc.timestamp_opt(unix_secs, 0).single() else {
         return "unknown".to_string();
     };
     match iana_time_zone::get_timezone()
         .ok()
-        .and_then(|name| name.parse::<chrono_tz::Tz>().ok())
+        .and_then(|name| name.parse::<Tz>().ok())
     {
         Some(tz) => dt
             .with_timezone(&tz)

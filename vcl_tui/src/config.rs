@@ -1,7 +1,14 @@
+use std::io::ErrorKind;
+#[cfg(unix)]
+use std::io::Write;
+#[cfg(unix)]
+use std::os::unix::fs::OpenOptionsExt;
 use std::{fs, path::PathBuf};
 
 use color_eyre::eyre::{ContextCompat, Result, WrapErr};
 use serde::{Deserialize, Serialize};
+
+use crate::utils;
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Config {
@@ -20,7 +27,7 @@ impl Config {
     }
 
     fn path() -> Option<PathBuf> {
-        crate::utils::get_config_dir()
+        utils::get_config_dir()
     }
 
     pub fn load() -> Result<Option<Config>> {
@@ -31,7 +38,7 @@ impl Config {
         let config_path = dir.join("config.toml");
         let contents = match fs::read_to_string(&config_path) {
             Ok(contents) => contents,
-            Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+            Err(err) if err.kind() == ErrorKind::NotFound => return Ok(None),
             Err(err) => return Err(err).context("failed to read config.toml"),
         };
 
@@ -50,9 +57,6 @@ impl Config {
         // Create it with 0600 from the start to avoid a brief world-readable window.
         #[cfg(unix)]
         {
-            use std::io::Write;
-            use std::os::unix::fs::OpenOptionsExt;
-
             let mut file = fs::OpenOptions::new()
                 .write(true)
                 .create(true)

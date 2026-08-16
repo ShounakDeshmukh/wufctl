@@ -1,6 +1,16 @@
-use crate::config::Config;
 use std::sync::Arc;
 use std::sync::mpsc::Receiver;
+use std::time::Instant;
+
+use chrono::{Days, Local, NaiveTime, TimeZone};
+use color_eyre::Result;
+use ratatui::widgets::ListState;
+use throbber_widgets_tui::ThrobberState;
+use tokio::runtime::Runtime;
+use vcl_lib::VclClient;
+
+use crate::config::Config;
+use crate::vcl::{ActionResult, ConnectData, ConnectDataResult, Image, RequestStatus};
 
 /// Only two real screens Images/Connect are popups or redirects
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -56,16 +66,16 @@ impl Default for SetupUiState {
 
 #[derive(Debug, Default)]
 pub struct ImagesUiState {
-    pub images: Vec<crate::vcl::Image>,
-    pub list_state: ratatui::widgets::ListState,
+    pub images: Vec<Image>,
+    pub list_state: ListState,
     /// Inline error (no toast UI).
     pub error: Option<String>,
     /// Last load time; gates 10-minute cache.
-    pub last_loaded: Option<std::time::Instant>,
+    pub last_loaded: Option<Instant>,
     /// Last `n` feedback (`Ok` success, `Err` danger).
     pub message: Option<Result<String, String>>,
     /// Debounce for `n` browser opens.
-    pub last_avd_open: Option<std::time::Instant>,
+    pub last_avd_open: Option<Instant>,
     /// `/` filter; `list_state` indexes `visible_indices()`.
     pub search: String,
     /// Cursor char index in `search`.
@@ -95,7 +105,7 @@ impl ImagesUiState {
 pub struct Reservation {
     pub id: i64,
     pub image_name: String,
-    pub status: crate::vcl::RequestStatus,
+    pub status: RequestStatus,
     pub start: i64,
     pub end: i64,
 }
@@ -103,17 +113,17 @@ pub struct Reservation {
 #[derive(Debug, Default)]
 pub struct ReservationsUiState {
     pub reservations: Vec<Reservation>,
-    pub list_state: ratatui::widgets::ListState,
+    pub list_state: ListState,
     /// No toast system yet - shown inline in place of the list.
     pub error: Option<String>,
     /// None until the first load; also gates the 20s auto-refresh and the `r` debounce.
-    pub last_poll: Option<std::time::Instant>,
+    pub last_poll: Option<Instant>,
     pub message: Option<Result<String, String>>,
 }
 /// Notification toast
 pub struct Toast {
     pub text: Result<String, String>,
-    pub expires_at: std::time::Instant,
+    pub expires_at: Instant,
 }
 
 pub const DURATION_PRESETS: &[(i64, &str)] = &[
@@ -225,7 +235,6 @@ impl NewReservationFormState {
     }
 
     fn later_timestamp(&self) -> Option<i64> {
-        use chrono::{Days, Local, NaiveTime, TimeZone};
         let today = Local::now().date_naive();
         let date = today.checked_add_days(Days::new(self.day_offset as u64))?;
         let hour_24 = match self.am_pm {
@@ -272,7 +281,7 @@ pub struct ExtendFormState {
 /// Fetched fresh every time the Connect popup opens - no cache, since the server-seen IP can change.
 #[derive(Debug, Default)]
 pub struct ConnectUiState {
-    pub data: Option<crate::vcl::ConnectData>,
+    pub data: Option<ConnectData>,
     pub error: Option<String>,
 }
 
@@ -290,21 +299,21 @@ impl Default for ExtendFormState {
 pub enum PendingOp {
     SetupTest {
         token: String,
-        rx: Receiver<color_eyre::Result<vcl_lib::VclClient>>,
+        rx: Receiver<Result<VclClient>>,
     },
-    LoadImages(Receiver<color_eyre::Result<Vec<crate::vcl::Image>>>),
-    LoadReservations(Receiver<color_eyre::Result<Vec<Reservation>>>),
+    LoadImages(Receiver<Result<Vec<Image>>>),
+    LoadReservations(Receiver<Result<Vec<Reservation>>>),
     EndReservation {
         id: i64,
         index: usize,
-        rx: Receiver<color_eyre::Result<crate::vcl::ActionResult>>,
+        rx: Receiver<Result<ActionResult>>,
     },
-    AddRequest(Receiver<color_eyre::Result<crate::vcl::ActionResult>>),
+    AddRequest(Receiver<Result<ActionResult>>),
     ExtendRequest {
         id: i64,
-        rx: Receiver<color_eyre::Result<crate::vcl::ActionResult>>,
+        rx: Receiver<Result<ActionResult>>,
     },
-    LoadConnectData(Receiver<color_eyre::Result<crate::vcl::ConnectDataResult>>),
+    LoadConnectData(Receiver<Result<ConnectDataResult>>),
 }
 
 pub struct App {
@@ -312,8 +321,8 @@ pub struct App {
     pub popup: Popup,
     pub config: Option<Config>,
     pub exit: bool,
-    pub async_runtime: Arc<tokio::runtime::Runtime>,
-    pub client: Option<Arc<vcl_lib::VclClient>>,
+    pub async_runtime: Arc<Runtime>,
+    pub client: Option<Arc<VclClient>>,
     pub setup: SetupUiState,
     pub images: ImagesUiState,
     pub reservations: ReservationsUiState,
@@ -322,5 +331,5 @@ pub struct App {
     pub connect: ConnectUiState,
     pub toast: Option<Toast>,
     pub pending: Option<PendingOp>,
-    pub throbber_state: throbber_widgets_tui::ThrobberState,
+    pub throbber_state: ThrobberState,
 }

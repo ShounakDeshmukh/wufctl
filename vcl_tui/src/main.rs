@@ -9,15 +9,22 @@ mod ui;
 mod utils;
 mod vcl;
 
-fn main() -> color_eyre::Result<()> {
+use std::io;
+
+use color_eyre::Result;
+use crossterm::event::{DisableBracketedPaste, EnableBracketedPaste};
+
+use state::App;
+
+fn main() -> Result<()> {
     let _logging_guard = logging::init();
     errors::install()?;
-    let mut app = state::App::new()?;
+    let mut app = App::new()?;
     let mut terminal = ratatui::init();
     terminal.clear()?;
-    crossterm::execute!(std::io::stdout(), crossterm::event::EnableBracketedPaste)?;
+    crossterm::execute!(io::stdout(), EnableBracketedPaste)?;
     let result = app.run(&mut terminal);
-    let _ = crossterm::execute!(std::io::stdout(), crossterm::event::DisableBracketedPaste);
+    let _ = crossterm::execute!(io::stdout(), DisableBracketedPaste);
     ratatui::restore();
     result
 }

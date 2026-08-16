@@ -1,6 +1,6 @@
 use ratatui::{
     Frame,
-    layout::{Constraint, Layout},
+    layout::{Constraint, Layout, Rect},
     style::Style,
     text::{Line, Span, Text},
     widgets::Paragraph,
@@ -8,6 +8,7 @@ use ratatui::{
 
 use crate::state::{App, SetupState};
 use crate::theme;
+use crate::utils;
 
 pub fn render(app: &mut App, frame: &mut Frame) {
     let [top_bar_area, pane_area] =
@@ -87,7 +88,7 @@ pub fn render(app: &mut App, frame: &mut Frame) {
     render_footer(frame, footer);
 }
 
-fn render_input(app: &App, frame: &mut Frame, area: ratatui::layout::Rect) {
+fn render_input(app: &App, frame: &mut Frame, area: Rect) {
     let display = if app.setup.masked {
         "\u{2022}".repeat(app.setup.input.chars().count())
     } else {
@@ -110,7 +111,7 @@ fn render_input(app: &App, frame: &mut Frame, area: ratatui::layout::Rect) {
     frame.set_cursor_position((content_area.x + cursor_col as u16, content_area.y));
 }
 
-fn render_status(app: &mut App, frame: &mut Frame, area: ratatui::layout::Rect) {
+fn render_status(app: &mut App, frame: &mut Frame, area: Rect) {
     if matches!(app.setup.state, SetupState::Validating) {
         super::render_throbber(app, frame, area, "Signing in...");
         return;
@@ -123,8 +124,8 @@ fn render_status(app: &mut App, frame: &mut Frame, area: ratatui::layout::Rect) 
     frame.render_widget(Paragraph::new(text).style(style), area);
 }
 
-fn render_footer(frame: &mut Frame, area: ratatui::layout::Rect) {
-    let text = match crate::utils::get_config_dir() {
+fn render_footer(frame: &mut Frame, area: Rect) {
+    let text = match utils::get_config_dir() {
         Some(dir) => format!("Saved to {}/config.toml (chmod 600)", dir.display()),
         None => "Saved to your config directory as config.toml (chmod 600)".to_string(),
     };
