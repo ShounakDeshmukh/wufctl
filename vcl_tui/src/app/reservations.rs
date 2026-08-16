@@ -146,8 +146,12 @@ impl App {
             }
             KeyCode::Char('c') if status == "ready" => {
                 let id = self.reservations.reservations[i].id;
+                let image_name = self.reservations.reservations[i].image_name.clone();
                 self.popup = Popup::Connect { id };
-                self.connect = ConnectUiState::default();
+                self.connect = ConnectUiState {
+                    image_name,
+                    ..ConnectUiState::default()
+                };
                 self.trigger_load_connect_data(id);
             }
             _ => {}

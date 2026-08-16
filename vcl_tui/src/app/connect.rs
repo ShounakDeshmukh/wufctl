@@ -7,7 +7,16 @@ use ratatui::DefaultTerminal;
 
 use crate::connect_action;
 use crate::state::{App, PendingOp, Popup};
-use crate::vcl::{self, ConnectDataResult};
+use crate::vcl::{self, ConnectData, ConnectDataResult};
+
+/// The xRDP method's remote port, e.g. "3389" from a "TCP:3389:3389" `connectports` entry.
+fn rdp_port(data: &ConnectData) -> Option<&str> {
+    data.connect_methods
+        .iter()
+        .find(|m| m.description.to_lowercase().contains("rdp"))
+        .and_then(|m| m.connectports.first())
+        .and_then(|p| p.rsplit(':').next())
+}
 
 impl App {
     pub(super) fn handle_connect_key(
@@ -38,6 +47,31 @@ impl App {
                 }
             }
             terminal.clear()?;
+        }
+
+        if key_event.code == KeyCode::Char('r') {
+            let Some(data) = &self.connect.data else {
+                return Ok(());
+            };
+            let Some(port) = rdp_port(data) else {
+                return Ok(());
+            };
+            let result = connect_action::save_rdp_file(
+                &self.connect.image_name,
+                &data.server_ip,
+                port,
+                &data.user,
+            );
+            match result {
+                Ok(path) => {
+                    let name = path
+                        .file_name()
+                        .and_then(|n| n.to_str())
+                        .unwrap_or("reservation.rdp");
+                    self.show_toast(Ok(format!("RDP file saved: {name}")));
+                }
+                Err(err) => self.connect.error = Some(format!("Couldn't save RDP file: {err}")),
+            }
         }
 
         Ok(())

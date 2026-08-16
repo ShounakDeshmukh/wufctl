@@ -1,4 +1,6 @@
+use std::fs;
 use std::io;
+use std::path::PathBuf;
 use std::process::{Command, ExitStatus, Stdio};
 
 use crossterm::cursor::Show;
@@ -35,6 +37,44 @@ pub fn describe_ssh_error(err: &io::Error) -> String {
     #[cfg(target_os = "macos")]
     let hint = "ssh not found, which is unusual since macOS ships it by default - check your PATH.";
     hint.to_string()
+}
+
+/// RDP file template, from vcl webui . MIght break need to be updated if the webui changes its template.
+pub fn save_rdp_file(image_name: &str, host: &str, port: &str, user: &str) -> io::Result<PathBuf> {
+    let dir = dirs::download_dir()
+        .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "no Downloads folder found"))?;
+    let path = dir.join(format!("{image_name}.rdp"));
+    let contents = format!(
+        "screen mode id:i:1\r\n\
+         desktopwidth:i:1024\r\n\
+         desktopheight:i:768\r\n\
+         session bpp:i:24\r\n\
+         winposstr:s:0,1,0,0,5000,4000\r\n\
+         full address:s:{host}:{port}\r\n\
+         compression:i:1\r\n\
+         keyboardhook:i:2\r\n\
+         audiomode:i:0\r\n\
+         redirectdrives:i:1\r\n\
+         redirectprinters:i:1\r\n\
+         redirectcomports:i:0\r\n\
+         redirectsmartcards:i:1\r\n\
+         displayconnectionbar:i:1\r\n\
+         autoreconnection enabled:i:1\r\n\
+         username:s:{user}\r\n\
+         clear password:s:\r\n\
+         domain:s:\r\n\
+         alternate shell:s:\r\n\
+         shell working directory:s:\r\n\
+         disable wallpaper:i:1\r\n\
+         disable full window drag:i:1\r\n\
+         disable menu anims:i:1\r\n\
+         disable themes:i:0\r\n\
+         disable cursor setting:i:0\r\n\
+         bitmapcachepersistenable:i:1\r\n\
+         dynamic resolution:i:1\r\n"
+    );
+    fs::write(&path, contents)?;
+    Ok(path)
 }
 
 /// Opens a URL in the default browser, cross-platform. Does not wait for the browser to exit.

@@ -55,16 +55,31 @@ pub fn render_popup(app: &mut App, frame: &mut Frame, id: i64) {
     }
 
     lines.push(Line::from(""));
-    if app.connect.data.is_some() {
-        lines.push(Line::from(vec![
+    if let Some(data) = &app.connect.data {
+        let mut hint = vec![
             Span::styled("  [Enter]", theme::accent()),
             Span::raw(" "),
             Span::styled("Connect", theme::dim()),
             Span::raw("   "),
+        ];
+        if data
+            .connect_methods
+            .iter()
+            .any(|m| m.description.to_lowercase().contains("rdp"))
+        {
+            hint.extend([
+                Span::styled("[r]", theme::accent()),
+                Span::raw(" "),
+                Span::styled("Save RDP file", theme::dim()),
+                Span::raw("   "),
+            ]);
+        }
+        hint.extend([
             Span::styled("[Esc]", theme::accent()),
             Span::raw(" "),
             Span::styled("Back", theme::dim()),
-        ]));
+        ]);
+        lines.push(Line::from(hint));
     } else {
         lines.push(Line::styled("  [Esc] Back", theme::dim()));
     }

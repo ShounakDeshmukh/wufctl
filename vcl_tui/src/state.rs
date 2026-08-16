@@ -281,6 +281,7 @@ pub struct ExtendFormState {
 /// Fetched fresh every time the Connect popup opens - no cache, since the server-seen IP can change.
 #[derive(Debug, Default)]
 pub struct ConnectUiState {
+    pub image_name: String,
     pub data: Option<ConnectData>,
     pub error: Option<String>,
 }
