@@ -4,12 +4,23 @@ pub fn get_config_dir() -> Option<PathBuf> {
     dirs::config_dir().map(|p| p.join("vcl_tui"))
 }
 
-/// `%:z` gives a numeric offset since `chrono::Local` doesn't resolve named zones like "EDT".
+/// `chrono::Local` can't resolve a named zone like "EDT" on its own, so look up the system's
+/// IANA zone via `iana-time-zone` and format through `chrono-tz` instead.
 pub fn format_timestamp(unix_secs: i64) -> String {
-    use chrono::{Local, TimeZone};
-    match Local.timestamp_opt(unix_secs, 0) {
-        chrono::LocalResult::Single(dt) => dt.format("%A, %b %-d, %Y, %-I:%M %p %:z").to_string(),
-        _ => "unknown".to_string(),
+    use chrono::{TimeZone, Utc};
+
+    let Some(dt) = Utc.timestamp_opt(unix_secs, 0).single() else {
+        return "unknown".to_string();
+    };
+    match iana_time_zone::get_timezone()
+        .ok()
+        .and_then(|name| name.parse::<chrono_tz::Tz>().ok())
+    {
+        Some(tz) => dt
+            .with_timezone(&tz)
+            .format("%A, %b %-d, %Y, %-I:%M %p %Z")
+            .to_string(),
+        None => dt.format("%A, %b %-d, %Y, %-I:%M %p UTC").to_string(),
     }
 }
 

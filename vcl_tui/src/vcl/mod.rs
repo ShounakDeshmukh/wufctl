@@ -1,7 +1,9 @@
 pub mod convert;
 pub mod model;
 
-pub use model::{ActionResult, Image, RequestListEntry, RequestStatus};
+pub use model::{
+    ActionResult, ConnectData, ConnectDataResult, Image, RequestListEntry, RequestStatus,
+};
 
 use color_eyre::eyre::{ContextCompat, Result};
 
@@ -52,4 +54,21 @@ pub async fn extend_request(
     minutes: i64,
 ) -> Result<ActionResult> {
     ActionResult::try_from(&client.extend_request(id, minutes).await?)
+}
+
+pub async fn get_ip(client: &vcl_lib::VclClient) -> Result<String> {
+    let value = client.get_ip().await?;
+    value
+        .get("ip")
+        .and_then(|v| v.as_str())
+        .map(str::to_owned)
+        .context("missing `ip`")
+}
+
+pub async fn get_request_connect_data(
+    client: &vcl_lib::VclClient,
+    id: i64,
+    remote_ip: &str,
+) -> Result<ConnectDataResult> {
+    ConnectDataResult::try_from(&client.get_request_connect_data(id, remote_ip).await?)
 }

@@ -21,6 +21,9 @@ pub enum Popup {
     ExtendForm {
         id: i64,
     },
+    Connect {
+        id: i64,
+    },
 }
 
 #[derive(Debug, Default)]
@@ -266,6 +269,13 @@ pub struct ExtendFormState {
     pub message: Option<String>,
 }
 
+/// Fetched fresh every time the Connect popup opens - no cache, since the server-seen IP can change.
+#[derive(Debug, Default)]
+pub struct ConnectUiState {
+    pub data: Option<crate::vcl::ConnectData>,
+    pub error: Option<String>,
+}
+
 impl Default for ExtendFormState {
     fn default() -> Self {
         Self {
@@ -294,6 +304,7 @@ pub enum PendingOp {
         id: i64,
         rx: Receiver<color_eyre::Result<crate::vcl::ActionResult>>,
     },
+    LoadConnectData(Receiver<color_eyre::Result<crate::vcl::ConnectDataResult>>),
 }
 
 pub struct App {
@@ -308,6 +319,7 @@ pub struct App {
     pub reservations: ReservationsUiState,
     pub new_reservation: NewReservationFormState,
     pub extend: ExtendFormState,
+    pub connect: ConnectUiState,
     pub toast: Option<Toast>,
     pub pending: Option<PendingOp>,
     pub throbber_state: throbber_widgets_tui::ThrobberState,

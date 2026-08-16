@@ -36,3 +36,27 @@ pub struct RequestListEntry {
     pub start: i64,
     pub end: i64,
 }
+
+/// One `connectMethods` entry from `get_request_connect_data()`; `id` is the map key, not a field.
+#[derive(Debug, Clone)]
+pub struct ConnectMethod {
+    pub id: String,
+    pub description: String,
+    pub connectports: Vec<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct ConnectData {
+    pub server_ip: String,
+    pub user: String,
+    pub password: String,
+    pub connect_port: String,
+    pub connect_methods: Vec<ConnectMethod>,
+}
+
+/// `notready` briefly precedes `ready`, same status/data split as `ActionResult`.
+#[derive(Debug, Clone)]
+pub enum ConnectDataResult {
+    NotReady,
+    Ready(ConnectData),
+}

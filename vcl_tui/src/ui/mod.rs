@@ -1,3 +1,4 @@
+pub mod connect;
 pub mod extend;
 pub mod images;
 pub mod new_reservation;
@@ -41,6 +42,7 @@ pub fn draw(app: &mut App, frame: &mut Frame) {
             new_reservation::render_popup(app, frame, image_idx)
         }
         Popup::ExtendForm { id } => extend::render_popup(app, frame, id),
+        Popup::Connect { id } => connect::render_popup(app, frame, id),
     }
 
     render_toast(app, frame);

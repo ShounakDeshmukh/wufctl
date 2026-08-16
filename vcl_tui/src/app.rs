@@ -1,8 +1,8 @@
 use crate::config::Config;
 use crate::state::{
-    App, DURATION_PRESETS, EXTEND_PRESETS, ExtendFormState, ExtendRow, FormRow, ImagesUiState,
-    NewReservationFormState, PendingOp, Popup, Reservation, ReservationsUiState, Screen,
-    SetupState, SetupUiState, Toast,
+    App, ConnectUiState, DURATION_PRESETS, EXTEND_PRESETS, ExtendFormState, ExtendRow, FormRow,
+    ImagesUiState, NewReservationFormState, PendingOp, Popup, Reservation, ReservationsUiState,
+    Screen, SetupState, SetupUiState, Toast,
 };
 use crossterm::event::{self, Event, KeyCode, KeyEventKind, KeyModifiers};
 use ratatui::DefaultTerminal;
@@ -44,6 +44,7 @@ impl App {
             reservations: ReservationsUiState::default(),
             new_reservation: NewReservationFormState::default(),
             extend: ExtendFormState::default(),
+            connect: ConnectUiState::default(),
             toast: None,
             pending: None,
             throbber_state: throbber_widgets_tui::ThrobberState::default(),
@@ -133,6 +134,15 @@ impl App {
                 }
                 Err(mpsc::TryRecvError::Disconnected) => {
                     self.extend.message = Some("Background task failed unexpectedly.".into());
+                }
+            },
+            PendingOp::LoadConnectData(rx) => match rx.try_recv() {
+                Ok(result) => self.apply_load_connect_data(result),
+                Err(mpsc::TryRecvError::Empty) => {
+                    self.pending = Some(PendingOp::LoadConnectData(rx));
+                }
+                Err(mpsc::TryRecvError::Disconnected) => {
+                    self.connect.error = Some("Background task failed unexpectedly.".into());
                 }
             },
         }
@@ -286,6 +296,7 @@ impl App {
                 return self.handle_new_reservation_key(key_event, image_idx);
             }
             Popup::ExtendForm { id } => return self.handle_extend_key(key_event, id),
+            Popup::Connect { .. } => return self.handle_connect_key(key_event),
         }
 
         match self.screen {
@@ -300,6 +311,11 @@ impl App {
         &mut self,
         key_event: crossterm::event::KeyEvent,
     ) -> color_eyre::Result<()> {
+        if key_event.code == KeyCode::Char('q') {
+            self.exit = true;
+            return Ok(());
+        }
+
         if key_event.code == KeyCode::Char('r') {
             if self.reservations_poll_due() {
                 self.trigger_load_reservations();
@@ -358,6 +374,12 @@ impl App {
                     id: self.reservations.reservations[i].id,
                 };
                 self.extend = ExtendFormState::default();
+            }
+            KeyCode::Char('c') if status == "ready" => {
+                let id = self.reservations.reservations[i].id;
+                self.popup = Popup::Connect { id };
+                self.connect = ConnectUiState::default();
+                self.trigger_load_connect_data(id);
             }
             _ => {}
         }
@@ -430,6 +452,20 @@ impl App {
         Ok(())
     }
 
+    fn handle_connect_key(
+        &mut self,
+        key_event: crossterm::event::KeyEvent,
+    ) -> color_eyre::Result<()> {
+        if key_event.code == KeyCode::Esc {
+            if self.pending.is_some() {
+                self.show_toast(Err("Still working - hang on...".to_string()));
+                return Ok(());
+            }
+            self.popup = Popup::None;
+        }
+        Ok(())
+    }
+
     fn adjust_extend_duration(&mut self, forward: bool) {
         let len = EXTEND_PRESETS.len();
         self.extend.duration_idx = if forward {
@@ -478,6 +514,35 @@ impl App {
                      Try a shorter extension.",
                 ));
             }
+        }
+    }
+
+    fn trigger_load_connect_data(&mut self, id: i64) {
+        let Some(client) = self.client.clone() else {
+            return;
+        };
+        let rt = Arc::clone(&self.async_runtime);
+        let (tx, rx) = mpsc::channel();
+        std::thread::spawn(move || {
+            let result = rt.block_on(async {
+                let ip = crate::vcl::get_ip(&client).await?;
+                crate::vcl::get_request_connect_data(&client, id, &ip).await
+            });
+            let _ = tx.send(result);
+        });
+        self.pending = Some(PendingOp::LoadConnectData(rx));
+    }
+
+    fn apply_load_connect_data(
+        &mut self,
+        result: color_eyre::Result<crate::vcl::ConnectDataResult>,
+    ) {
+        match result {
+            Ok(crate::vcl::ConnectDataResult::Ready(data)) => self.connect.data = Some(data),
+            Ok(crate::vcl::ConnectDataResult::NotReady) => {
+                self.connect.error = Some("Not ready yet - try again in a moment.".to_string());
+            }
+            Err(err) => self.connect.error = Some(format!("{err:#}")),
         }
     }
 

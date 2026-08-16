@@ -46,7 +46,9 @@ fn render_list(app: &mut App, frame: &mut Frame, area: Rect) {
         Span::styled("[n]", theme::accent()),
         Span::raw(" New reservation   "),
         Span::styled("[r]", theme::accent()),
-        Span::raw(" Refresh"),
+        Span::raw(" Refresh   "),
+        Span::styled("[q]", theme::accent()),
+        Span::raw(" Quit"),
     ]);
     let block = theme::block().title("Reservations").title_bottom(hint);
 

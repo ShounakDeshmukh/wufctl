@@ -1,7 +1,10 @@
-use color_eyre::eyre::{ContextCompat, Result};
+use color_eyre::eyre::{ContextCompat, Result, eyre};
 use vcl_lib::Value;
 
-use super::model::{ActionResult, Image, RequestListEntry, RequestStatus};
+use super::model::{
+    ActionResult, ConnectData, ConnectDataResult, ConnectMethod, Image, RequestListEntry,
+    RequestStatus,
+};
 
 /// Coerces a `Value` into an `i64`, accepting either a JSON number or a string that parses as an integer
 pub fn coerce_i64(v: &Value, field: &'static str) -> Result<i64> {
@@ -19,6 +22,19 @@ fn field_str(v: &Value, key: &str) -> Result<String> {
         .as_str()
         .map(str::to_owned)
         .with_context(|| format!("field `{key}` is not a string"))
+}
+
+fn field_str_array(v: &Value, key: &str) -> Result<Vec<String>> {
+    field(v, key)?
+        .as_array()
+        .with_context(|| format!("field `{key}` is not an array"))?
+        .iter()
+        .map(|item| {
+            item.as_str()
+                .map(str::to_owned)
+                .with_context(|| format!("field `{key}` contains a non-string element"))
+        })
+        .collect()
 }
 
 impl TryFrom<&Value> for Image {
@@ -79,6 +95,39 @@ impl TryFrom<&Value> for RequestListEntry {
             start: coerce_i64(field(v, "start")?, "start")?,
             end: coerce_i64(field(v, "end")?, "end")?,
         })
+    }
+}
+
+fn connect_method(id: &str, v: &Value) -> Result<ConnectMethod> {
+    Ok(ConnectMethod {
+        id: id.to_string(),
+        description: field_str(v, "description")?,
+        connectports: field_str_array(v, "connectports")?,
+    })
+}
+
+impl TryFrom<&Value> for ConnectDataResult {
+    type Error = color_eyre::eyre::Report;
+
+    fn try_from(v: &Value) -> Result<Self> {
+        if field_str(v, "status")? == "notready" {
+            return Ok(ConnectDataResult::NotReady);
+        }
+        let Value::Struct(methods) = field(v, "connectMethods")? else {
+            return Err(eyre!("expected `connectMethods` to be a struct"));
+        };
+        let mut connect_methods = methods
+            .iter()
+            .map(|(id, mv)| connect_method(id, mv))
+            .collect::<Result<Vec<_>>>()?;
+        connect_methods.sort_by(|a, b| a.id.cmp(&b.id));
+        Ok(ConnectDataResult::Ready(ConnectData {
+            server_ip: field_str(v, "serverIP")?,
+            user: field_str(v, "user")?,
+            password: field_str(v, "password")?,
+            connect_port: field_str(v, "connectport")?,
+            connect_methods,
+        }))
     }
 }
 
@@ -239,5 +288,58 @@ mod tests {
         );
         assert_eq!(entry.start, 1786662000);
         assert_eq!(entry.end, 1786684500);
+    }
+
+    #[test]
+    fn connect_data_not_ready() {
+        let mut map = HashMap::new();
+        map.insert("status".to_string(), Value::String("notready".to_string()));
+        match ConnectDataResult::try_from(&Value::Struct(map)).unwrap() {
+            ConnectDataResult::NotReady => {}
+            ConnectDataResult::Ready(_) => panic!("expected NotReady"),
+        }
+    }
+
+    #[test]
+    fn connect_data_ready_from_live_shape() {
+        let mut ssh = HashMap::new();
+        ssh.insert(
+            "description".to_string(),
+            Value::String("SSH (Secure Shell) on Port 22".to_string()),
+        );
+        ssh.insert("connecttext".to_string(), Value::String(String::new()));
+        ssh.insert(
+            "connectports".to_string(),
+            Value::Array(vec![Value::String("TCP:22:22".to_string())]),
+        );
+
+        let mut methods = HashMap::new();
+        methods.insert("1".to_string(), Value::Struct(ssh));
+
+        let mut map = HashMap::new();
+        map.insert("status".to_string(), Value::String("ready".to_string()));
+        map.insert(
+            "serverIP".to_string(),
+            Value::String("152.7.179.113".to_string()),
+        );
+        map.insert("user".to_string(), Value::String("sdeshmu4".to_string()));
+        map.insert(
+            "password".to_string(),
+            Value::String("(use your campus password)".to_string()),
+        );
+        map.insert("connectport".to_string(), Value::String("22".to_string()));
+        map.insert("connectMethods".to_string(), Value::Struct(methods));
+
+        match ConnectDataResult::try_from(&Value::Struct(map)).unwrap() {
+            ConnectDataResult::Ready(data) => {
+                assert_eq!(data.server_ip, "152.7.179.113");
+                assert_eq!(data.user, "sdeshmu4");
+                assert_eq!(data.connect_port, "22");
+                assert_eq!(data.connect_methods.len(), 1);
+                assert_eq!(data.connect_methods[0].id, "1");
+                assert_eq!(data.connect_methods[0].connectports, vec!["TCP:22:22"]);
+            }
+            ConnectDataResult::NotReady => panic!("expected Ready"),
+        }
     }
 }
