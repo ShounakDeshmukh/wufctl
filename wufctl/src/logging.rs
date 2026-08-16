@@ -1,4 +1,6 @@
 use std::fs;
+#[cfg(unix)]
+use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
 use std::time::{Duration, SystemTime};
 
@@ -16,6 +18,7 @@ const MAX_LOG_AGE: Duration = Duration::from_secs(5 * 24 * 60 * 60);
 pub fn init() -> WorkerGuard {
     let logdir = utils::get_config_dir().expect("Failed to get config directory");
     fs::create_dir_all(&logdir).expect("Failed to create log directory");
+    restrict_log_dir_permissions(&logdir);
     clean_old_logs(&logdir);
 
     let filename = format!("wufctl-{}.log", Local::now().format("%Y%m%d-%H%M%S"));
@@ -35,6 +38,14 @@ pub fn init() -> WorkerGuard {
 
     guard
 }
+
+#[cfg(unix)]
+fn restrict_log_dir_permissions(logdir: &Path) {
+    let _ = fs::set_permissions(logdir, fs::Permissions::from_mode(0o700));
+}
+
+#[cfg(not(unix))]
+fn restrict_log_dir_permissions(_logdir: &Path) {}
 
 /// Best-effort - a scan failure or leftover stale log isn't worth failing startup over.
 fn clean_old_logs(logdir: &Path) {
