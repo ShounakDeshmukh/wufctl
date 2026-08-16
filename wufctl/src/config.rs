@@ -6,9 +6,13 @@ use std::os::unix::fs::OpenOptionsExt;
 use std::{fs, path::PathBuf};
 
 use color_eyre::eyre::{ContextCompat, Result, WrapErr};
+use keyring::Entry;
 use serde::{Deserialize, Serialize};
 
 use crate::utils;
+
+const KEYRING_SERVICE: &str = "wufctl";
+const KEYRING_USERNAME: &str = "token";
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Config {
@@ -30,7 +34,24 @@ impl Config {
         utils::get_config_dir()
     }
 
+    /// Tries the OS keyring first; falls back to the config file if no secret store is
+    /// available (e.g. headless Linux with no Secret Service running).
     pub fn load() -> Result<Option<Config>> {
+        if let Some(config) = Self::load_from_keyring() {
+            return Ok(Some(config));
+        }
+        Self::load_from_file()
+    }
+
+    fn load_from_keyring() -> Option<Config> {
+        let token = Entry::new(KEYRING_SERVICE, KEYRING_USERNAME)
+            .ok()?
+            .get_password()
+            .ok()?;
+        Some(Config::new(token))
+    }
+
+    fn load_from_file() -> Result<Option<Config>> {
         let Some(dir) = Self::path() else {
             return Ok(None);
         };
@@ -47,7 +68,25 @@ impl Config {
         Ok(Some(config))
     }
 
+    /// Tries the OS keyring first; falls back to the config file if no secret store is
+    /// available. A successful keyring save removes any leftover plaintext file.
     pub fn save(&self) -> Result<()> {
+        if let Ok(entry) = Entry::new(KEYRING_SERVICE, KEYRING_USERNAME)
+            && entry.set_password(&self.token).is_ok()
+        {
+            self.remove_file();
+            return Ok(());
+        }
+        self.save_to_file()
+    }
+
+    fn remove_file(&self) {
+        if let Some(dir) = Self::path() {
+            let _ = fs::remove_file(dir.join("config.toml"));
+        }
+    }
+
+    fn save_to_file(&self) -> Result<()> {
         let dir = Self::path().context("could not determine config directory for this OS")?;
         fs::create_dir_all(&dir).context("failed to create config directory")?;
 

@@ -26,10 +26,13 @@ You'll need a VCL API token:
 3. Generate a new token
 
 The first time you run `wufctl` it'll ask for that token and validate it against the server
-before saving it locally - `~/.config/wufctl/config.toml` on Linux, `~/Library/Application
-Support/wufctl/config.toml` on macOS, `%APPDATA%\wufctl\config.toml` on Windows, resolved via
-the OS's own config directory convention rather than hardcoded. The file is written `0600` on
-Unix so nothing else on the machine can read it.
+before saving it. It's saved to the OS's own secure credential store - Keychain on macOS,
+Credential Manager on Windows, the Secret Service (GNOME Keyring/KWallet) on Linux - so it's
+encrypted at rest rather than sitting in a plaintext file. If no secret store is available
+(e.g. a headless Linux box with no Secret Service running), it falls back to a plain file at
+`~/.config/wufctl/config.toml` on Linux, `~/Library/Application Support/wufctl/config.toml` on
+macOS, or `%APPDATA%\wufctl\config.toml` on Windows, written `0600` on Unix so nothing else on
+the machine can read it.
 
 ## Building and running
 
