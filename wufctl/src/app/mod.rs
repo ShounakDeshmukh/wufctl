@@ -193,6 +193,7 @@ impl App {
             }
             Popup::ExtendForm { id } => return self.handle_extend_key(key_event, id),
             Popup::Connect { .. } => return self.handle_connect_key(key_event, terminal),
+            Popup::ConfirmEnd { index } => return self.handle_confirm_end_key(key_event, index),
         }
 
         match self.screen {

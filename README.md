@@ -51,10 +51,11 @@ Reservations is the home screen - everything else is a popup over it.
 |---|---|---|
 | `n` | Reservations | Open the image picker to start a new reservation |
 | `r` | Reservations | Refresh (debounced to once per 20s) |
+| `t` | Reservations | Change the saved API token |
 | `q` | Reservations | Quit |
 | `c` | Reservations, on a `ready` row | Open the Connect popup |
 | `e` | Reservations, on a `ready` row | Extend the reservation |
-| `x` | Reservations, any row but `loading` | End the reservation |
+| `x` | Reservations, any row but `loading` | End the reservation (asks for confirmation) |
 | `/` | Image picker | Search images by name |
 | `Enter` | Connect popup | Start the SSH session |
 | `r` | Connect popup, if xRDP is offered | Save a `.rdp` file to Downloads |

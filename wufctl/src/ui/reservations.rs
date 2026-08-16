@@ -3,7 +3,7 @@ use ratatui::{
     layout::{Constraint, Layout, Rect},
     style::{Modifier, Style},
     text::{Line, Span},
-    widgets::{List, ListItem, Paragraph, Wrap},
+    widgets::{Clear, List, ListItem, Paragraph, Wrap},
 };
 
 use crate::state::{App, PendingOp};
@@ -48,6 +48,8 @@ fn render_list(app: &mut App, frame: &mut Frame, area: Rect) {
         Span::raw(" New reservation   "),
         Span::styled("[r]", theme::accent()),
         Span::raw(" Refresh   "),
+        Span::styled("[t]", theme::accent()),
+        Span::raw(" Change token   "),
         Span::styled("[q]", theme::accent()),
         Span::raw(" Quit"),
     ]);
@@ -158,5 +160,30 @@ fn render_details(app: &mut App, frame: &mut Frame, area: Rect) {
         lines.push(Line::styled(text, style));
     }
 
+    frame.render_widget(Paragraph::new(lines).wrap(Wrap { trim: false }), inner);
+}
+
+pub fn render_confirm_end_popup(app: &App, frame: &mut Frame, index: usize) {
+    let area = super::centered_rect(46, 8, frame.area());
+    frame.render_widget(Clear, area);
+    let block = theme::block().title("End Reservation");
+    let inner = block.inner(area);
+    frame.render_widget(block, area);
+
+    let r = &app.reservations.reservations[index];
+    let lines = vec![
+        Line::from(""),
+        Line::from(format!("End reservation #{} ({})?", r.id, r.image_name)),
+        Line::from(""),
+        Line::from(vec![
+            Span::styled("[Enter]", theme::danger()),
+            Span::raw(" "),
+            Span::styled("Confirm", theme::dim()),
+            Span::raw("   "),
+            Span::styled("[Esc]", theme::accent()),
+            Span::raw(" "),
+            Span::styled("Cancel", theme::dim()),
+        ]),
+    ];
     frame.render_widget(Paragraph::new(lines).wrap(Wrap { trim: false }), inner);
 }

@@ -34,6 +34,9 @@ pub enum Popup {
     Connect {
         id: i64,
     },
+    ConfirmEnd {
+        index: usize,
+    },
 }
 
 #[derive(Debug, Default)]

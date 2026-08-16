@@ -5,7 +5,9 @@ use std::time::{Duration, Instant};
 use color_eyre::Result;
 use crossterm::event::{KeyCode, KeyEvent};
 
-use crate::state::{App, ConnectUiState, ExtendFormState, PendingOp, Popup, Reservation};
+use crate::state::{
+    App, ConnectUiState, ExtendFormState, PendingOp, Popup, Reservation, Screen, SetupUiState,
+};
 use crate::vcl::{self, ActionResult};
 
 const RESERVATIONS_POLL_INTERVAL: Duration = Duration::from_secs(20);
@@ -111,6 +113,12 @@ impl App {
             return Ok(());
         }
 
+        if key_event.code == KeyCode::Char('t') {
+            self.screen = Screen::Setup;
+            self.setup = SetupUiState::default();
+            return Ok(());
+        }
+
         let len = self.reservations.reservations.len();
         if len == 0 {
             return Ok(());
@@ -131,12 +139,7 @@ impl App {
                 self.reservations.message = None;
             }
             KeyCode::Char('x') if status != "loading" => {
-                if self.pending.is_some() {
-                    // Don't stomp an in-flight call (e.g. an auto-poll refresh) with a second one.
-                    self.show_toast(Err("Still working - hang on...".to_string()));
-                } else {
-                    self.trigger_end_reservation(i);
-                }
+                self.popup = Popup::ConfirmEnd { index: i };
             }
             KeyCode::Char('e') if status == "ready" => {
                 self.popup = Popup::ExtendForm {
@@ -155,6 +158,22 @@ impl App {
                 self.trigger_load_connect_data(id);
             }
             _ => {}
+        }
+        Ok(())
+    }
+
+    pub(super) fn handle_confirm_end_key(
+        &mut self,
+        key_event: KeyEvent,
+        index: usize,
+    ) -> Result<()> {
+        if key_event.code == KeyCode::Esc {
+            self.popup = Popup::None;
+            return Ok(());
+        }
+        if key_event.code == KeyCode::Enter {
+            self.popup = Popup::None;
+            self.trigger_end_reservation(index);
         }
         Ok(())
     }
