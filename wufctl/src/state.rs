@@ -37,6 +37,7 @@ pub enum Popup {
     ConfirmEnd {
         index: usize,
     },
+    ConfirmChangeToken,
 }
 
 #[derive(Debug, Default)]

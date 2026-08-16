@@ -47,6 +47,7 @@ pub fn draw(app: &mut App, frame: &mut Frame) {
         Popup::ExtendForm { id } => extend::render_popup(app, frame, id),
         Popup::Connect { id } => connect::render_popup(app, frame, id),
         Popup::ConfirmEnd { index } => reservations::render_confirm_end_popup(app, frame, index),
+        Popup::ConfirmChangeToken => reservations::render_confirm_change_token_popup(frame),
     }
 
     render_toast(app, frame);

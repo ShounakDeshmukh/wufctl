@@ -123,8 +123,7 @@ impl App {
         }
 
         if key_event.code == KeyCode::Char('t') {
-            self.screen = Screen::Setup;
-            self.setup = SetupUiState::default();
+            self.popup = Popup::ConfirmChangeToken;
             return Ok(());
         }
 
@@ -187,6 +186,19 @@ impl App {
         Ok(())
     }
 
+    pub(super) fn handle_confirm_change_token_key(&mut self, key_event: KeyEvent) -> Result<()> {
+        if key_event.code == KeyCode::Esc {
+            self.popup = Popup::None;
+            return Ok(());
+        }
+        if key_event.code == KeyCode::Enter {
+            self.popup = Popup::None;
+            self.screen = Screen::Setup;
+            self.setup = SetupUiState::default();
+        }
+        Ok(())
+    }
+
     fn trigger_end_reservation(&mut self, index: usize) {
         let Some(client) = self.client.clone() else {
             return;
@@ -225,10 +237,11 @@ impl App {
     }
 }
 
-/// Heuristic: VCL's Bearer-token auth rejects with an HTTP 401/403, not an XML-RPC fault.
+/// Confirmed live: a rejected token comes back as an XML-RPC fault ("Fault [3] Access denied"),
+/// not an HTTP 401/403.
 fn is_auth_error(err: &color_eyre::eyre::Report) -> bool {
     match err.downcast_ref::<VclError>() {
-        Some(VclError::HttpError(msg)) => msg.contains("401") || msg.contains("403"),
+        Some(VclError::ApiError(msg)) => msg.to_lowercase().contains("access denied"),
         _ => false,
     }
 }

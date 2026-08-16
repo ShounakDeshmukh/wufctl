@@ -187,3 +187,27 @@ pub fn render_confirm_end_popup(app: &App, frame: &mut Frame, index: usize) {
     ];
     frame.render_widget(Paragraph::new(lines).wrap(Wrap { trim: false }), inner);
 }
+
+pub fn render_confirm_change_token_popup(frame: &mut Frame) {
+    let area = super::centered_rect(46, 8, frame.area());
+    frame.render_widget(Clear, area);
+    let block = theme::block().title("Change Token");
+    let inner = block.inner(area);
+    frame.render_widget(block, area);
+
+    let lines = vec![
+        Line::from(""),
+        Line::from("Change the saved API token?"),
+        Line::from(""),
+        Line::from(vec![
+            Span::styled("[Enter]", theme::accent()),
+            Span::raw(" "),
+            Span::styled("Confirm", theme::dim()),
+            Span::raw("   "),
+            Span::styled("[Esc]", theme::accent()),
+            Span::raw(" "),
+            Span::styled("Cancel", theme::dim()),
+        ]),
+    ];
+    frame.render_widget(Paragraph::new(lines).wrap(Wrap { trim: false }), inner);
+}
