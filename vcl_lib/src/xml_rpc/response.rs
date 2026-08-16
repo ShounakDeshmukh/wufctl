@@ -43,13 +43,17 @@ fn parse_fault(fault: Node) -> VclError {
     match result {
         Ok(Value::Struct(map)) => {
             let code = map.get("faultCode").and_then(Value::as_i64).unwrap_or(-1);
-            let msg = map
+            let message = map
                 .get("faultString")
                 .and_then(Value::as_str)
-                .unwrap_or("Unknown error");
-            VclError::ApiError(format!("Fault [{}] {}", code, msg))
+                .unwrap_or("Unknown error")
+                .to_string();
+            VclError::ApiError { code, message }
         }
-        Ok(other) => VclError::ApiError(format!("Fault: {}", other)),
+        Ok(other) => VclError::ApiError {
+            code: -1,
+            message: other.to_string(),
+        },
         Err(e) => e,
     }
 }

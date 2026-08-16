@@ -120,9 +120,9 @@ fn test_parse_response_fault() {
     let result = parse_response(xml);
     assert!(result.is_err());
     match result {
-        Err(VclError::ApiError(msg)) => {
-            assert!(msg.contains("Fault [3]"));
-            assert!(msg.contains("Access denied"));
+        Err(VclError::ApiError { code, message }) => {
+            assert_eq!(code, 3);
+            assert!(message.contains("Access denied"));
         }
         _ => panic!("Expected ApiError"),
     }
@@ -464,9 +464,9 @@ fn test_fault_code_1_invalidparam() {
     let result = parse_response(xml);
     assert!(result.is_err());
     match result {
-        Err(VclError::ApiError(msg)) => {
-            assert!(msg.contains("Fault [1]"));
-            assert!(msg.contains("Invalid parameters"));
+        Err(VclError::ApiError { code, message }) => {
+            assert_eq!(code, 1);
+            assert!(message.contains("Invalid parameters"));
         }
         _ => panic!("Expected ApiError"),
     }
@@ -495,9 +495,9 @@ fn test_fault_code_2_reservation_error() {
     let result = parse_response(xml);
     assert!(result.is_err());
     match result {
-        Err(VclError::ApiError(msg)) => {
-            assert!(msg.contains("Fault [2]"));
-            assert!(msg.contains("Reservation failed"));
+        Err(VclError::ApiError { code, message }) => {
+            assert_eq!(code, 2);
+            assert!(message.contains("Reservation failed"));
         }
         _ => panic!("Expected ApiError"),
     }

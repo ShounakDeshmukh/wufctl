@@ -21,8 +21,8 @@ pub enum VclError {
     #[error("XML parse error: {0}")]
     XmlParseError(String),
 
-    #[error("VCL API error: {0}")]
-    ApiError(String),
+    #[error("VCL API error: Fault [{code}] {message}")]
+    ApiError { code: i64, message: String },
 
     #[error("Missing token")]
     MissingToken,

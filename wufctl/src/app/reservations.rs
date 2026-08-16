@@ -246,11 +246,10 @@ impl App {
     }
 }
 
-/// Confirmed live: a rejected token comes back as an XML-RPC fault ("Fault [3] Access denied"),
-/// not an HTTP 401/403.
+///A rejected token comes back as XML-RPC fault code 3, not an HTTP 401/403.
 fn is_auth_error(err: &color_eyre::eyre::Report) -> bool {
-    match err.downcast_ref::<VclError>() {
-        Some(VclError::ApiError(msg)) => msg.to_lowercase().contains("access denied"),
-        _ => false,
-    }
+    matches!(
+        err.downcast_ref::<VclError>(),
+        Some(VclError::ApiError { code: 3, .. })
+    )
 }
