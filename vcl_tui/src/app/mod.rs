@@ -70,7 +70,7 @@ impl App {
             self.poll_pending();
             // Only one background call in flight at a time.
             if self.pending.is_none() {
-                if self.popup == Popup::ImagePicker && self.images_cache_stale() {
+                if self.popup == Popup::ImagePicker && self.is_images_cache_stale() {
                     self.trigger_load_images();
                 }
                 if self.screen == Screen::Reservations && self.should_auto_poll_reservations() {
@@ -78,7 +78,7 @@ impl App {
                 }
             }
             terminal.draw(|f| ui::draw(self, f))?;
-            self.handle_events()?;
+            self.handle_events(terminal)?;
         }
         Ok(())
     }
@@ -157,14 +157,14 @@ impl App {
     }
 
     /// Times out instead of blocking forever, so `run()`'s loop keeps checking timers.
-    fn handle_events(&mut self) -> Result<()> {
+    fn handle_events(&mut self, terminal: &mut DefaultTerminal) -> Result<()> {
         if !event::poll(EVENT_POLL_RATE)? {
             return Ok(());
         }
         match event::read()? {
             // crossterm also emits key release/repeat events on Windows.
             Event::Key(key_event) if key_event.kind == KeyEventKind::Press => {
-                self.handle_key_event(key_event)?
+                self.handle_key_event(key_event, terminal)?
             }
             Event::Paste(text) => self.handle_paste(text),
             _ => {}
@@ -172,7 +172,11 @@ impl App {
         Ok(())
     }
 
-    fn handle_key_event(&mut self, key_event: KeyEvent) -> Result<()> {
+    fn handle_key_event(
+        &mut self,
+        key_event: KeyEvent,
+        terminal: &mut DefaultTerminal,
+    ) -> Result<()> {
         if key_event.modifiers.contains(KeyModifiers::CONTROL)
             && key_event.code == KeyCode::Char('c')
         {
@@ -188,7 +192,7 @@ impl App {
                 return self.handle_new_reservation_key(key_event, image_idx);
             }
             Popup::ExtendForm { id } => return self.handle_extend_key(key_event, id),
-            Popup::Connect { .. } => return self.handle_connect_key(key_event),
+            Popup::Connect { .. } => return self.handle_connect_key(key_event, terminal),
         }
 
         match self.screen {

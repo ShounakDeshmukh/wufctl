@@ -55,7 +55,19 @@ pub fn render_popup(app: &mut App, frame: &mut Frame, id: i64) {
     }
 
     lines.push(Line::from(""));
-    lines.push(Line::styled("  [Esc] Back", theme::dim()));
+    if app.connect.data.is_some() {
+        lines.push(Line::from(vec![
+            Span::styled("  [Enter]", theme::accent()),
+            Span::raw(" "),
+            Span::styled("Connect", theme::dim()),
+            Span::raw("   "),
+            Span::styled("[Esc]", theme::accent()),
+            Span::raw(" "),
+            Span::styled("Back", theme::dim()),
+        ]));
+    } else {
+        lines.push(Line::styled("  [Esc] Back", theme::dim()));
+    }
 
     frame.render_widget(Paragraph::new(lines).wrap(Wrap { trim: false }), inner);
 }

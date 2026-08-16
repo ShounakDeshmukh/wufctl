@@ -14,8 +14,7 @@ use crate::vcl::{self, Image};
 const IMAGES_CACHE_INTERVAL: Duration = Duration::from_secs(600);
 
 impl App {
-    /// True on first open or once the cache interval has passed.
-    pub(super) fn images_cache_stale(&self) -> bool {
+    pub(super) fn is_images_cache_stale(&self) -> bool {
         self.images
             .last_loaded
             .is_none_or(|t| t.elapsed() >= IMAGES_CACHE_INTERVAL)
@@ -101,7 +100,7 @@ impl App {
         Ok(())
     }
 
-    /// Vim/less-style `/` search: `Enter` keeps the filter, `Esc` clears it.
+    /// Vim-style `/` search: `Enter` keeps the filter, `Esc` clears it.
     fn handle_image_search_key(&mut self, key_event: KeyEvent) -> Result<()> {
         match key_event.code {
             KeyCode::Enter => {

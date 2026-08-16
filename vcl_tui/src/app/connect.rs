@@ -3,19 +3,43 @@ use std::thread;
 
 use color_eyre::Result;
 use crossterm::event::{KeyCode, KeyEvent};
+use ratatui::DefaultTerminal;
 
+use crate::connect_action;
 use crate::state::{App, PendingOp, Popup};
 use crate::vcl::{self, ConnectDataResult};
 
 impl App {
-    pub(super) fn handle_connect_key(&mut self, key_event: KeyEvent) -> Result<()> {
+    pub(super) fn handle_connect_key(
+        &mut self,
+        key_event: KeyEvent,
+        terminal: &mut DefaultTerminal,
+    ) -> Result<()> {
         if key_event.code == KeyCode::Esc {
             if self.pending.is_some() {
                 self.show_toast(Err("Still working - hang on...".to_string()));
                 return Ok(());
             }
             self.popup = Popup::None;
+            return Ok(());
         }
+
+        if key_event.code == KeyCode::Enter {
+            let Some(data) = self.connect.data.clone() else {
+                return Ok(());
+            };
+            match connect_action::connect_ssh(&data.user, &data.server_ip, &data.connect_port) {
+                Ok(_status) => {
+                    self.popup = Popup::None;
+                    self.show_toast(Ok("vcl_tui resumed - ssh session ended.".to_string()));
+                }
+                Err(err) => {
+                    self.connect.error = Some(connect_action::describe_ssh_error(&err));
+                }
+            }
+            terminal.clear()?;
+        }
+
         Ok(())
     }
 
