@@ -2,6 +2,7 @@
 name = "wufctl"
 version = "0.1.0"
 edition = "2024"
+repository = "https://github.com/ShounakDeshmukh/wufctl"
 
 [dependencies]
 crossterm = "0.29.0"
