@@ -130,11 +130,7 @@ fn render_details(app: &App, frame: &mut Frame, area: Rect) {
             Line::from(format!("Usage: {}", img.usage)),
             Line::from(format!("Description: {}", img.description)),
             Line::from(""),
-            Line::from(vec![
-                Span::styled("[n]", theme::accent()),
-                Span::raw(" "),
-                Span::styled("Reserve this image", theme::dim()),
-            ]),
+            super::hint_line(&[("[n]", "Reserve this image")]),
         ]
     } else {
         vec![
@@ -145,10 +141,7 @@ fn render_details(app: &App, frame: &mut Frame, area: Rect) {
         ]
     };
     if let Some(msg) = &app.images.message {
-        let (text, style) = match msg {
-            Ok(text) => (text.as_str(), theme::success()),
-            Err(text) => (text.as_str(), theme::danger()),
-        };
+        let (text, style) = super::result_parts(msg);
         lines.push(Line::from(""));
         lines.push(Line::styled(text, style));
     }

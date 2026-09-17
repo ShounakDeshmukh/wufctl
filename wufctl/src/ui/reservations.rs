@@ -12,24 +12,20 @@ use crate::theme;
 use crate::utils;
 
 pub fn render(app: &mut App, frame: &mut Frame) {
-    let [top_bar_area, pane_area] =
-        Layout::vertical([Constraint::Length(2), Constraint::Min(0)]).areas(frame.area());
-
-    super::render_top_bar(app, frame, top_bar_area);
+    let area = frame.area();
 
     if let Some(err) = &app.reservations.error {
         frame.render_widget(
             Paragraph::new(err.as_str())
                 .style(theme::danger())
                 .block(theme::block().title("Reservations")),
-            pane_area,
+            area,
         );
         return;
     }
 
     let [list_area, details_area] =
-        Layout::horizontal([Constraint::Percentage(40), Constraint::Percentage(60)])
-            .areas(pane_area);
+        Layout::horizontal([Constraint::Percentage(40), Constraint::Percentage(60)]).areas(area);
 
     render_list(app, frame, list_area);
     render_details(app, frame, details_area);
@@ -128,20 +124,8 @@ fn render_details(app: &mut App, frame: &mut Frame, area: Rect) {
     lines.push(Line::from(""));
     match r.status.status.as_str() {
         "ready" => {
-            lines.push(Line::from(vec![
-                Span::styled("[c]", theme::accent()),
-                Span::raw(" "),
-                Span::styled("Connect", theme::dim()),
-                Span::raw("   "),
-                Span::styled("[e]", theme::accent()),
-                Span::raw(" "),
-                Span::styled("Extend", theme::dim()),
-            ]));
-            lines.push(Line::from(vec![
-                Span::styled("[x]", theme::accent()),
-                Span::raw(" "),
-                Span::styled("End reservation", theme::dim()),
-            ]));
+            lines.push(super::hint_line(&[("[c]", "Connect"), ("[e]", "Extend")]));
+            lines.push(super::hint_line(&[("[x]", "End reservation")]));
         }
         "loading" => {
             lines.push(Line::styled("Provisioning image...", theme::dim()));
@@ -150,20 +134,11 @@ fn render_details(app: &mut App, frame: &mut Frame, area: Rect) {
                 theme::dim(),
             ));
         }
-        _ => {
-            lines.push(Line::from(vec![
-                Span::styled("[x]", theme::accent()),
-                Span::raw(" "),
-                Span::styled("End reservation", theme::dim()),
-            ]));
-        }
+        _ => lines.push(super::hint_line(&[("[x]", "End reservation")])),
     }
 
     if let Some(msg) = &app.reservations.message {
-        let (text, style) = match msg {
-            Ok(text) => (text.as_str(), theme::success()),
-            Err(text) => (text.as_str(), theme::danger()),
-        };
+        let (text, style) = super::result_parts(msg);
         lines.push(Line::from(""));
         lines.push(Line::styled(text, style));
     }
@@ -172,43 +147,43 @@ fn render_details(app: &mut App, frame: &mut Frame, area: Rect) {
 }
 
 pub fn render_confirm_end_popup(app: &App, frame: &mut Frame, index: usize) {
-    let area = super::centered_rect(46, 8, frame.area());
-    frame.render_widget(Clear, area);
-    let block = theme::block().title("End Reservation");
-    let inner = block.inner(area);
-    frame.render_widget(block, area);
-
     let r = &app.reservations.reservations[index];
-    let lines = vec![
-        Line::from(""),
-        Line::from(format!("End reservation #{} ({})?", r.id, r.image_name)),
-        Line::from(""),
-        Line::from(vec![
-            Span::styled("[Enter]", theme::danger()),
-            Span::raw(" "),
-            Span::styled("Confirm", theme::dim()),
-            Span::raw("   "),
-            Span::styled("[Esc]", theme::accent()),
-            Span::raw(" "),
-            Span::styled("Cancel", theme::dim()),
-        ]),
-    ];
-    frame.render_widget(Paragraph::new(lines).wrap(Wrap { trim: false }), inner);
+    render_confirm_popup(
+        frame,
+        "End Reservation",
+        format!("End reservation #{} ({})?", r.id, r.image_name),
+        theme::danger(),
+    );
 }
 
 pub fn render_confirm_change_token_popup(frame: &mut Frame) {
+    render_confirm_popup(
+        frame,
+        "Change Token",
+        "Change the saved API token?".to_string(),
+        theme::accent(),
+    );
+}
+
+/// Shared yes/no card; `confirm_style` colors [Enter] red for destructive prompts.
+fn render_confirm_popup(
+    frame: &mut Frame,
+    title: &'static str,
+    prompt: String,
+    confirm_style: Style,
+) {
     let area = super::centered_rect(46, 8, frame.area());
     frame.render_widget(Clear, area);
-    let block = theme::block().title("Change Token");
+    let block = theme::block().title(title);
     let inner = block.inner(area);
     frame.render_widget(block, area);
 
     let lines = vec![
         Line::from(""),
-        Line::from("Change the saved API token?"),
+        Line::from(prompt),
         Line::from(""),
         Line::from(vec![
-            Span::styled("[Enter]", theme::accent()),
+            Span::styled("[Enter]", confirm_style),
             Span::raw(" "),
             Span::styled("Confirm", theme::dim()),
             Span::raw("   "),

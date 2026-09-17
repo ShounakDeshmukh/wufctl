@@ -56,30 +56,16 @@ pub fn render_popup(app: &mut App, frame: &mut Frame, id: i64) {
 
     lines.push(Line::from(""));
     if let Some(data) = &app.connect.data {
-        let mut hint = vec![
-            Span::styled("  [Enter]", theme::accent()),
-            Span::raw(" "),
-            Span::styled("Connect", theme::dim()),
-            Span::raw("   "),
-        ];
+        let mut hints = vec![("  [Enter]", "Connect")];
         if data
             .connect_methods
             .iter()
             .any(|m| m.description.to_lowercase().contains("rdp"))
         {
-            hint.extend([
-                Span::styled("[r]", theme::accent()),
-                Span::raw(" "),
-                Span::styled("Save RDP file", theme::dim()),
-                Span::raw("   "),
-            ]);
+            hints.push(("[r]", "Save RDP file"));
         }
-        hint.extend([
-            Span::styled("[Esc]", theme::accent()),
-            Span::raw(" "),
-            Span::styled("Back", theme::dim()),
-        ]);
-        lines.push(Line::from(hint));
+        hints.push(("[Esc]", "Back"));
+        lines.push(super::hint_line(&hints));
     } else {
         lines.push(Line::styled("  [Esc] Back", theme::dim()));
     }

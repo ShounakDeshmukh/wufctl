@@ -2,7 +2,7 @@ use ratatui::{
     Frame,
     layout::{Constraint, Layout, Rect},
     style::Style,
-    text::{Line, Span, Text},
+    text::{Line, Text},
     widgets::Paragraph,
 };
 
@@ -11,12 +11,7 @@ use crate::theme;
 use crate::utils;
 
 pub fn render(app: &mut App, frame: &mut Frame) {
-    let [top_bar_area, pane_area] =
-        Layout::vertical([Constraint::Length(2), Constraint::Min(0)]).areas(frame.area());
-
-    super::render_top_bar(app, frame, top_bar_area);
-
-    let card_area = super::centered_rect(60, 16, pane_area);
+    let card_area = super::centered_rect(60, 16, frame.area());
     let block = theme::block().title("Setup");
     let inner = block.inner(card_area);
     frame.render_widget(block, card_area);
@@ -66,20 +61,15 @@ pub fn render(app: &mut App, frame: &mut Frame) {
     render_status(app, frame, status);
 
     frame.render_widget(
-        Line::from(vec![
-            Span::styled("[Enter]", theme::accent()),
-            Span::raw(" "),
-            Span::styled("Validate & continue", theme::dim()),
-            Span::raw("   "),
-            Span::styled("[Ctrl+R]", theme::accent()),
-            Span::raw(" "),
-            Span::styled(
+        super::hint_line(&[
+            ("[Enter]", "Validate & continue"),
+            (
+                "[Ctrl+R]",
                 if app.setup.masked {
                     "Show token"
                 } else {
                     "Hide token"
                 },
-                theme::dim(),
             ),
         ]),
         hint,
