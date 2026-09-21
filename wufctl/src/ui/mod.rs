@@ -12,7 +12,7 @@ use ratatui::{
     layout::{Constraint, Layout, Rect},
     style::{Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, Borders, Clear, Paragraph},
+    widgets::{Clear, Paragraph},
 };
 use throbber_widgets_tui::Throbber;
 
@@ -27,8 +27,14 @@ pub fn draw(app: &mut App, frame: &mut Frame) {
     {
         app.toast = None;
     }
-    // Advances one frame per draw, so it keeps spinning while the background call blocks.
-    if app.pending.is_some() {
+    // Advances one frame per draw (the event loop redraws every ~250ms regardless), so it keeps
+    // spinning both while a call blocks and while a reservation sits "loading" between polls.
+    let has_loading_reservation = app
+        .reservations
+        .reservations
+        .iter()
+        .any(|r| r.status.status == "loading");
+    if app.pending.is_some() || has_loading_reservation {
         app.throbber_state.calc_next();
     }
 
@@ -72,6 +78,28 @@ pub fn field_line(label: &str, focused: bool, value: String) -> Line<'static> {
     ])
 }
 
+/// "[key] Label" pairs in the shared hint style, separated by three spaces.
+pub fn hint_line(pairs: &[(&str, &str)]) -> Line<'static> {
+    let mut spans = Vec::with_capacity(pairs.len() * 4);
+    for (i, (key, label)) in pairs.iter().enumerate() {
+        if i > 0 {
+            spans.push(Span::raw("   "));
+        }
+        spans.push(Span::styled(key.to_string(), theme::accent()));
+        spans.push(Span::raw(" "));
+        spans.push(Span::styled(label.to_string(), theme::dim()));
+    }
+    Line::from(spans)
+}
+
+/// Green for Ok, red for Err - how every operation result is rendered.
+pub fn result_parts(msg: &Result<String, String>) -> (&str, Style) {
+    match msg {
+        Ok(text) => (text.as_str(), theme::success()),
+        Err(text) => (text.as_str(), theme::danger()),
+    }
+}
+
 /// Centered throbber + label, drawn inside whichever panel is waiting on content.
 pub fn render_throbber(app: &mut App, frame: &mut Frame, area: Rect, label: &'static str) {
     let text_width = (label.chars().count() as u16 + 2).min(area.width);
@@ -90,10 +118,7 @@ pub fn render_throbber(app: &mut App, frame: &mut Frame, area: Rect, label: &'st
 /// Bottom-right, drawn last so it overlays whatever's underneath.
 fn render_toast(app: &App, frame: &mut Frame) {
     let Some(toast) = &app.toast else { return };
-    let (message, style) = match &toast.text {
-        Ok(t) => (t.as_str(), theme::success()),
-        Err(t) => (t.as_str(), theme::danger()),
-    };
+    let (message, style) = result_parts(&toast.text);
     let text = format!("> {message}");
     let area = frame.area();
     let width = (text.chars().count() as u16 + 2).min(area.width);
@@ -113,37 +138,6 @@ fn render_toast(app: &App, frame: &mut Frame) {
         Paragraph::new(text).style(style.add_modifier(Modifier::BOLD)),
         inner,
     );
-}
-
-pub fn render_top_bar(app: &App, frame: &mut Frame, area: Rect) {
-    let block = Block::new()
-        .borders(Borders::BOTTOM)
-        .border_style(theme::dim());
-    let inner = block.inner(area);
-    frame.render_widget(block, area);
-
-    let (dot, dot_style, label) = if app.client.is_some() {
-        ("\u{25cf}", theme::success(), "SIGNED IN")
-    } else {
-        ("\u{25cb}", theme::dim(), "NOT SIGNED IN")
-    };
-    let left = Line::from(vec![
-        Span::styled("WUFCTL", theme::accent().add_modifier(Modifier::BOLD)),
-        Span::styled("  NCSU VCL", theme::dim()),
-    ]);
-    let right = Line::from(vec![
-        Span::styled(dot, dot_style),
-        Span::raw(" "),
-        Span::styled(label, dot_style.add_modifier(Modifier::BOLD)),
-    ]);
-    let [left_area, right_area] = Layout::horizontal([
-        Constraint::Fill(1),
-        Constraint::Length(right.width() as u16),
-    ])
-    .areas(inner);
-
-    frame.render_widget(Paragraph::new(left), left_area);
-    frame.render_widget(Paragraph::new(right), right_area);
 }
 
 pub fn centered_rect(width: u16, height: u16, area: Rect) -> Rect {
